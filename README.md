@@ -1,0 +1,1 @@
+# WorldClim Implicit Neural Representation - Work In Progress
