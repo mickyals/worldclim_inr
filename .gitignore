@@ -2,3 +2,4 @@
 /data/worldclim2.zarr/**
 .idea/**
 __pycache__/**
+/notebooks/coordinates.h5
