@@ -207,18 +207,29 @@ class WorldClimProcessor():
         LOGGER.info("____________________________________________")
         return normalized_stats
 
-    def run(self, path: str):
+    def run(self):
         """
-        Runs the processor
-
-        Args:
-            path (str): The path to the dataset
+        Runs the WorldClimProcessor
         """
         LOGGER.info("RUNNING")
-        self._find_dataset(path) # check that the dataset exists
-        dataset = self._load_dataset(path) # load the dataset
+        self._find_dataset(self.path) # check that the dataset exists
+        dataset = self._load_dataset(self.path) # load the dataset
         mask = self._land_compute_mask(dataset) # compute the mask
-        self._split_land_ocean_coords(mask, 'coordinates.h5') # split the dataset
+        self._split_land_ocean_coords(mask, output_file='coordinates.h5') # split the dataset
         self._get_normalized_stats(dataset) # get the normalized stats
         LOGGER.info("COMPLETED RUNNING")
         LOGGER.info("____________________________________________")
+
+
+class WorldClimDataset(IterableDataset):
+    def __init__(self, path):
+        super().__init__()
+
+        pass
+
+    def _normalize(self):
+        pass
+    def __len__(self):
+        pass
+    def __iter__(self):
+        pass
