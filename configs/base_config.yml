@@ -1,2 +1,9 @@
 Dataset:
-  path: data/worldclim2.zarr
+  data_path: 'data/worldclim2.zarr'
+  points_path: '../coordinates.h5'
+  normalised_stats_path: '../normalized_stats.json'
+  data_key: 'land_coords' # 'ocean_coords'
+  shuffle: True
+  deg2rad: True
+  
+  
