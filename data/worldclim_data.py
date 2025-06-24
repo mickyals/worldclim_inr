@@ -213,10 +213,14 @@ class WorldClimProcessor():
         """
         LOGGER.info("RUNNING")
         self._find_dataset(self.path) # check that the dataset exists
-        dataset = self._load_dataset(self.path) # load the dataset
-        mask = self._land_compute_mask(dataset) # compute the mask
-        self._split_land_ocean_coords(mask, output_file='coordinates.h5') # split the dataset
-        self._get_normalized_stats(dataset) # get the normalized stats
+        dataset = self._load_dataset(self.path)  # load the dataset
+
+        if not os.path.exists('coordinates.h5'):
+            mask = self._land_compute_mask(dataset) # compute the mask
+            self._split_land_ocean_coords(mask, output_file='coordinates.h5') # split the dataset
+
+        if not os.path.exists('normalized_stats.json'):
+            self._get_normalized_stats(dataset) # get the normalized stats
         LOGGER.info("COMPLETED RUNNING")
         LOGGER.info("____________________________________________")
 
