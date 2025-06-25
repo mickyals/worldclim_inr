@@ -337,6 +337,8 @@ class WorldClimDataset(IterableDataset):
         Yields:
             numpy.ndarray: A coordinate point (2,)
         """
+
+        LOGGER.info("LOADING POINTS")
         with h5py.File('coordinates.h5', 'r') as f:
             # Get the coordinates dataset and store the number of points
             coords = f[self.key]
@@ -374,6 +376,8 @@ class WorldClimDataset(IterableDataset):
             min_tensor (torch.Tensor): shape (1, n)
             max_tensor (torch.Tensor): shape (1, n)
         """
+
+        LOGGER.info("LOADING NORMALIZED STATS")
         with open(self.normalised_stats_path, 'r') as f:
             stats = json.load(f)
 
@@ -404,6 +408,7 @@ class WorldClimDataset(IterableDataset):
         Returns:
             normalized_data_tensor (torch.Tensor): The normalized tensor. Shape: (n, 1)
         """
+        LOGGER.info("NORMALIZING DATA")
         return 2 * (raw_data_tensor - min_tensor) / (max_tensor - min_tensor) - 1
 
     def _coords_to_radians(self, x, y):
@@ -417,6 +422,7 @@ class WorldClimDataset(IterableDataset):
         Returns:
             torch.Tensor: A tensor containing the x and y coordinates in radians. Shape: (2, 1)
         """
+        LOGGER.info("CONVERTING COORDINATES TO RADIANS")
         # Convert x and y from degrees to radians
         x_rad = numpy.radians(x)
         y_rad = numpy.radians(y)
