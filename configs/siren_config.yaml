@@ -1,3 +1,7 @@
+Optimizer:
+    name: 'torch.optim.Adam'
+    lr: 1.0e-4
+
 Dataset:
   data_path: 'data/worldclim2.zarr'
   points_path: '../coordinates.h5'
