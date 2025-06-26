@@ -5,3 +5,4 @@ __pycache__/**
 /notebooks/coordinates.h5
 /notebooks/*.log
 *.log
+**/__pycache__/
