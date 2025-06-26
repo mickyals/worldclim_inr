@@ -1,0 +1,32 @@
+Dataset:
+  data_path: 'data/worldclim2.zarr'
+  points_path: '../coordinates.h5'
+  normalised_stats_path: '../normalized_stats.json'
+  data_key: 'land_coords' # 'ocean_coords'
+  shuffle: True
+  deg2rad: True
+
+
+
+Model:
+  SIREN_MODEL:
+    name: 'models.implicit_neural_representations.inr_models.siren_model.SirenModel'
+    in_features: 2
+    out_features: 2
+    hidden_layers: 5
+    hidden_features: 128
+    first_omega_0: 30.0
+    hidden_omega_0: 30.0
+    residual_net: False
+
+  FINER_MODEL:
+    name: 'models.implicit_neural_representations.inr_models.siren_model.FinerModel'
+    in_features: 2
+    out_features: 2
+    hidden_layers: 5
+    hidden_features: 128
+    first_omega_0: 30.0
+    hidden_omega_0: 30.0  # scaling factor
+    first_bias: 1.0 # higher bias values give large range of frequencies
+    hidden_bias: 1.0
+    residual_net: False

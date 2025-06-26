@@ -138,7 +138,7 @@ class wire_activation(nn.Module):
             scale (float): The scaling factor for the wire activation function.
             omega_w (float): The frequency scaling factor for the wire activation function.
             with_finer (bool, optional): Whether to apply finer adjustments. Defaults to False.
-            omega (float, optional): The frequency scaling factor for the finer adjustments. Defaults to 1.
+            omega_f (float, optional): The frequency scaling factor for the finer adjustments. Defaults to 1.
         """
         super().__init__()
         self.scale = scale
