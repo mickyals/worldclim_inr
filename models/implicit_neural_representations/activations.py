@@ -3,9 +3,13 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from helpers import get_logger
+
+LOGGER = get_logger(name = "Activations", log_file="worldclim-dataset.log")
+
 
 class siren_activation(nn.Module):
-    def __init__(self, omega=1, with_finer=False):
+    def __init__(self, omega_f=1, with_finer=False):
         """
         Initializes the activation function with the given parameters.
 
@@ -15,7 +19,7 @@ class siren_activation(nn.Module):
         """
         super().__init__()
         # Set the frequency scaling factor
-        self.omega = omega
+        self.omega_f = omega_f
         # Determine if finer adjustments should be applied
         self.with_finer = with_finer
 
@@ -47,20 +51,25 @@ class siren_activation(nn.Module):
         Returns:
             torch.Tensor: The output tensor after applying the sinc activation.
         """
+        LOGGER.info("APPLYING SIREN ACTIVATION FUNCTION")
         if self.with_finer:
+            LOGGER.debug("Applying finer adjustments")
             # Generate alpha for finer adjustments
             alpha = self.generate_alpha(x)
             # Modulate x with omega and alpha
             mod_x = alpha * x
         else:
+            LOGGER.debug("Applying SIREN adjustments")
             # Modulate x with omega
-            mod_x = self.omega * x
+            mod_x = self.omega_f * x
+
+        LOGGER.debug("Applying sine function to modulated x")
         # Apply sine function to the modulated x
         return torch.sin(mod_x)
 
 
 class gaussian_activation(nn.Module):
-    def __init__(self, scale, with_finer=False, omega=1):
+    def __init__(self, scale, with_finer=False, omega_f=1):
         """
         Initializes the activation function with the given parameters.
 
@@ -75,7 +84,7 @@ class gaussian_activation(nn.Module):
         # Determine if finer adjustments should be applied
         self.with_finer = with_finer
         # Set the frequency scaling factor
-        self.omega = omega
+        self.omega_f = omega_f
 
     @staticmethod
     def generate_alpha(x):
@@ -102,18 +111,26 @@ class gaussian_activation(nn.Module):
         Returns:
             torch.Tensor: The output tensor after applying the Gaussian activation.
         """
+
+        LOGGER.info("APPLYING Gaussian ACTIVATION FUNCTION")
         if self.with_finer:
+            LOGGER.debug("Applying finer adjustments")
             # Generate alpha for finer adjustments
             alpha = self.generate_alpha(x)
             # Modulate x with omega and alpha
-            x = torch.sin(self.omega * alpha * x)
+            x = torch.sin(self.omega_f * alpha * x)
 
-        # Apply the Gaussian activation function
-        return torch.exp(-(self.scale * x)**2)
+            LOGGER.debug("Applying Gaussian function to finer modulated x")
+            # Apply the Gaussian activation function
+            return torch.exp(-(self.scale/self.omega_f * x)**2)
+        else:
+            LOGGER.debug("Applying Gaussian function to modulated x")
+            # Apply the Gaussian activation function
+            return torch.exp(-(self.scale * x)**2)
 
 
 class wire_activation(nn.Module):
-    def __init__(self, scale, omega_w, with_finer=False, omega=1 ):
+    def __init__(self, scale, omega_w, with_finer=False, omega_f=1 ):
         """
         Initializes the wire activation function with the given parameters.
 
@@ -127,7 +144,7 @@ class wire_activation(nn.Module):
         self.scale = scale
         self.omega_w= omega_w
         self.with_finer = with_finer
-        self.omega = omega
+        self.omega_f = omega_f
 
     @staticmethod
     def generate_alpha(x):
@@ -179,34 +196,53 @@ class wire_activation(nn.Module):
         Returns:
             torch.Tensor: The output tensor after applying the wire activation.
         """
+
+        LOGGER.info("APPLYING WIRE ACTIVATION FUNCTION")
         if self.with_finer:
+            LOGGER.debug("Applying finer adjustments")
             if x.is_complex():
-                # Generate the complex alpha value for the wire activation function
-                alpha_complex = self.generate_complex_alpha(x)
-                # Apply the wire activation function with the complex alpha value
-                mod_x = torch.sin(self.omega * alpha_complex)
+                LOGGER.debug("Applying complex finer adjustments")
+                # Generate the complex alpha value for finer adjustments
+                alpha = self.generate_complex_alpha(x)
+                # Modulate x with omega and complex alpha
+
+                LOGGER.debug("Applying complex sine function")
+                modulated_x = torch.sin(self.omega_f * alpha)
             else:
-                # Generate the alpha value for the wire activation function
+                LOGGER.debug("Applying real finer adjustments")
+                # Generate the alpha value for finer adjustments
                 alpha = self.generate_alpha(x)
-                # Apply the wire activation function with the alpha value
-                mod_x = torch.sin(self.omega * alpha * x)
+                # Modulate x with omega and alpha
+                modulated_x = torch.sin(self.omega_f * alpha * x)
+
+            LOGGER.debug("Applying finer modulated wire activation function")
+            # Apply the wire activation function with modulation
+            return torch.exp((1j * self.omega_w / self.omega_f * modulated_x) -
+                             torch.abs(self.scale / self.omega_f * modulated_x)**2)
         else:
             # Apply the standard wire activation function
-            mod_x = x
-        # Apply the exponential function to the output of the wire activation function
-        return torch.exp((1j * self.omega_w * mod_x) - torch.abs(self.scale * mod_x)**2)
+            LOGGER.debug("Standard wire modulation")
+            modulated_x = x
+
+        LOGGER.debug("Applying standard wire activation function")
+        # Apply the exponential function to the modulated output
+        return torch.exp((1j * self.omega_w * modulated_x) -
+                         torch.abs(self.scale * modulated_x)**2)
 
 
 
+
+
+########################## UNSURE IF IMPLEMENTED CORRECTLY ##########################
 
 class hosc_activation(nn.Module):
-    def __init__(self, beta, omega=1, with_finer=False):
+    def __init__(self, beta, omega_f=1, with_finer=False):
         """
         Initializes the hosc_activation function with the given parameters.
 
         Args:
             beta (float): The scaling factor for the tanh function.
-            omega (float, optional): The frequency scaling factor. Defaults to 1.
+            omega_f (float, optional): The frequency scaling factor. Defaults to 1.
             with_finer (bool, optional): Whether to apply finer adjustments. Defaults to False.
         """
         super().__init__()
@@ -215,7 +251,7 @@ class hosc_activation(nn.Module):
         # Determine if finer adjustments should be applied
         self.with_finer = with_finer
         # Set the frequency scaling factor
-        self.omega = omega
+        self.omega_f = omega_f
 
     @staticmethod
     def generate_alpha(x):
@@ -249,16 +285,17 @@ class hosc_activation(nn.Module):
             # Generate the alpha value for the finer adjustments
             alpha = self.generate_alpha(x)
             # Apply the finer adjustments
-            mod_x = self.omega * alpha * x
+            mod_x = torch.sin(self.omega * alpha * x)
+            return torch.tanh(self.beta / self.omega_f * mod_x)
         else:
             # Apply the standard sinc activation function
-            mod_x = self.omega * x
-        # Apply the tanh function with the given scaling factor
-        return torch.tanh(self.beta * torch.sin(mod_x))
+            mod_x = torch.sin(self.omega * x)
+            # Apply the tanh function with the given scaling factor
+            return torch.tanh(self.beta * mod_x)
 
 
 class sinc_activation(nn.Module):
-    def __init__(self, omega=1, with_finer=False):
+    def __init__(self, omega_f=1, with_finer=False):
         """
         Initializes the activation function with the given parameters.
 
@@ -268,7 +305,7 @@ class sinc_activation(nn.Module):
         """
         super().__init__()
         # Set the frequency scaling factor
-        self.omega = omega
+        self.omega_f = omega_f
         # Determine if finer adjustments should be applied
         self.with_finer = with_finer
 
@@ -301,10 +338,10 @@ class sinc_activation(nn.Module):
             # Generate alpha for finer adjustments
             alpha = self.generate_alpha(x)
             # Modulate x with omega and alpha
-            mod_x = self.omega * alpha * x
+            mod_x = self.omega_f * alpha * x
         else:
             # Modulate x with omega
-            mod_x = self.omega * x
+            mod_x = self.omega_f * x
         # Apply sinc function to the modulated x
         return torch.sinc(mod_x)
 
