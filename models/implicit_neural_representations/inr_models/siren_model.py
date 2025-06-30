@@ -132,7 +132,7 @@ class SirenResidualLayer(nn.Module):
 
 
 class SirenModel(nn.Module):
-    def __init__(self, in_features=2, out_features=2, hidden_layers=5, hidden_features=128, first_omega_0=30., hidden_omega_0=30., residual_net=False):
+    def __init__(self, in_features=2, out_features=2, hidden_layers=5, hidden_features=128, bias=True, final_bias=False, first_omega_0=30., hidden_omega_0=30., residual_net=False):
         """
         Initializes a SirenModel with the given parameters.
 
@@ -149,21 +149,21 @@ class SirenModel(nn.Module):
         LOGGER.info("SIREN MODEL")
         self.net = []
         # build the first layer
-        self.net.append(SirenLayer(in_features, hidden_features, bias=True, is_first=True, omega_0=first_omega_0))
+        self.net.append(SirenLayer(in_features, hidden_features, bias=bias,is_first=True, omega_0=first_omega_0))
 
         # build the hidden layers
         for i in range(hidden_layers):
             if residual_net:
                 # build a residual layer
                 LOGGER.info(f"SIREN RESIDUAL LAYER {i}")
-                self.net.append(SirenResidualLayer(hidden_features, hidden_features, bias=True, omega_0=hidden_omega_0))
+                self.net.append(SirenResidualLayer(hidden_features, hidden_features, bias=bias, omega_0=hidden_omega_0))
             else:
                 # build a normal layer
                 LOGGER.info(f"SIREN LAYER {i}")
-                self.net.append(SirenLayer(hidden_features, hidden_features, bias=True, is_first=False, omega_0=hidden_omega_0))
+                self.net.append(SirenLayer(hidden_features, hidden_features, bias=bias, is_first=False, omega_0=hidden_omega_0))
 
         # build the final layer
-        final_layer = nn.Linear(hidden_features, out_features)
+        final_layer = nn.Linear(hidden_features, out_features, bias=final_bias)
         with torch.no_grad():
             final_layer.weight.uniform_(-numpy.sqrt(6/hidden_features)/hidden_omega_0, numpy.sqrt(6/hidden_features)/hidden_omega_0)
         self.net.append(final_layer)
@@ -262,7 +262,7 @@ class FinerLayer(nn.Module):
         Returns:
             torch.Tensor: The output tensor after applying the FinerLayer.
         """
-        LOGGER.info("FINER LAYER")
+        LOGGER.debug("FINER LAYER")
         # Apply the linear layer
         out = self.linear(x)
         # Apply the siren activation function
@@ -321,12 +321,12 @@ class FinerResidualLayer(nn.Module):
         Returns:
             torch.Tensor: The output tensor after applying the FinerResidualLayer.
         """
-        LOGGER.info("FINER RESIDUAL LAYER")
+        LOGGER.debug("FINER RESIDUAL LAYER")
         out = self.linear(x)
         return self.activation(out) + x
 
 class FinerModel(nn.Module):
-    def __init__(self, in_features=2, out_features=2, bias=True, hidden_layers=5, hidden_features=128, first_omega_0=30., hidden_omega_0=30.,
+    def __init__(self, in_features=2, out_features=2, bias=True, final_bias=False, hidden_layers=5, hidden_features=128, first_omega_0=30., hidden_omega_0=30.,
                  first_bias=None, hidden_bias=None, residual_net=False):
         """
         Initializes the FinerModel.
@@ -360,7 +360,7 @@ class FinerModel(nn.Module):
                 self.net.append(FinerLayer(hidden_features, hidden_features, bias=True, is_first=False, omega_0=hidden_omega_0, hidden_bias=hidden_bias))
 
         # build the final layer
-        final_layer = nn.Linear(hidden_features, out_features)
+        final_layer = nn.Linear(hidden_features, out_features, bias=final_bias)
         with torch.no_grad():
             final_layer.weight.uniform_(-numpy.sqrt(6/hidden_features)/hidden_omega_0, numpy.sqrt(6/hidden_features)/hidden_omega_0)
         self.net.append(final_layer)
@@ -377,5 +377,5 @@ class FinerModel(nn.Module):
         Returns:
             torch.Tensor: The output tensor.
         """
-        LOGGER.info("FORWARDING FINER MODEL")
+        LOGGER.debug("FORWARDING FINER MODEL")
         return self.net(x)

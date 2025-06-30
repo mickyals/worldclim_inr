@@ -76,7 +76,7 @@ class gaussian_activation(nn.Module):
         Args:
             scale (float): The scaling factor for the activation function.
             with_finer (bool, optional): Whether to apply finer adjustments. Defaults to False.
-            omega (float, optional): The frequency scaling factor. Defaults to 1.
+            omega_f (float, optional): The frequency scaling factor. Defaults to 1.
         """
         super().__init__()
         # Set the scaling factor for the activation function

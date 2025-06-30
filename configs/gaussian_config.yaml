@@ -1,0 +1,38 @@
+Optimizer:
+    name: 'torch.optim.Adam'
+    lr: 1.0e-4
+
+Dataset:
+  data_path: 'data/worldclim2.zarr'
+  points_path: '../coordinates.h5'
+  normalised_stats_path: '../normalized_stats.json'
+  data_key: 'land_coords' # 'ocean_coords'
+  shuffle: True
+  deg2rad: True
+
+
+
+Model:
+  GAUSSIAN_MODEL:
+    name: 'models.implicit_neural_representations.inr_models.siren_model.GaussianModel'
+    in_features:
+    out_features:
+    hidden_features: 128
+    hidden_layers: 5
+    final_bias: False
+    scale: 30.0
+    weight_init: 0.1
+    residual_net: False
+
+  GAUSSIAN_FINER_MODEL:
+    name: 'models.implicit_neural_representations.inr_models.siren_model.GaussianFinerModel'
+    in_features:
+    out_features:
+    hidden_features: 128
+    hidden_layers: 5
+    final_bias: False
+    scale: 30.0
+    weight_init: 0.1
+    bias_init: 1.0
+    omega_f: 2.5 # set based on FINER++ Paper
+    residual_net: False # True is using residual connections

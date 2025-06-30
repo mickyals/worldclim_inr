@@ -19,9 +19,11 @@ Model:
     out_features: 2
     hidden_layers: 5
     hidden_features: 128
+    bias: True
+    final_bias: False
     first_omega_0: 30.0
     hidden_omega_0: 30.0
-    residual_net: False
+    residual_net: False # set true is using siren residual model
 
   FINER_MODEL:
     name: 'models.implicit_neural_representations.inr_models.siren_model.FinerModel'
@@ -29,8 +31,10 @@ Model:
     out_features: 2
     hidden_layers: 5
     hidden_features: 128
+    bias: True
+    final_bias: False
     first_omega_0: 30.0
     hidden_omega_0: 30.0  # scaling factor
     first_bias: 1.0 # higher bias values give large range of frequencies
     hidden_bias: 1.0
-    residual_net: False
+    residual_net: False # set true is using finer residual model
