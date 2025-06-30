@@ -473,7 +473,7 @@ class WorldClimDataset(IterableDataset):
                 input_tensor = self._coords_to_radians(x, y)
 
                 # Yield the input and output tensors
-                yield {'input': input_tensor, 'output': normalized_data}
+                yield {'input': input_tensor, 'target': normalized_data}
         else:
             # Iterate over the points in the dataset and yield the input and output tensors
             for y, x in self._get_points():
@@ -492,7 +492,7 @@ class WorldClimDataset(IterableDataset):
                 input_tensor = torch.tensor([[x,y]]) # shape (2, 1)
 
                 # Yield the input and output tensors
-                yield {'input': input_tensor, 'output': normalized_data}
+                yield {'input': input_tensor, 'target': normalized_data}
 
 
 

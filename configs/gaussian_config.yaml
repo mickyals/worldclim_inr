@@ -2,6 +2,11 @@ Optimizer:
     name: 'torch.optim.Adam'
     lr: 1.0e-4
 
+Scheduler:
+    name: 'torch.optim.lr_scheduler.ReduceLROnPlateau'
+    factor: 0.5
+    patience: 5
+
 Dataset:
   data_path: 'data/worldclim2.zarr'
   points_path: '../coordinates.h5'
