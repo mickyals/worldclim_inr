@@ -161,7 +161,7 @@ class wire_activation(nn.Module):
             return torch.abs(x) + 1
 
     @staticmethod
-    def generate_complex_alpha(x):
+    def generate_complex_alpha(x, omega):
         """
         Generates the complex alpha value for the wire activation function.
 
@@ -177,11 +177,11 @@ class wire_activation(nn.Module):
             alpha_imag = torch.abs(x.imag) + 1
 
         # Scale the real and imaginary parts of x by the corresponding alpha values
-        real_scaled = x.real * alpha_real
-        imag_scaled = x.imag * alpha_imag
+        x.real = x.real * alpha_real
+        x.imag = x.imag * alpha_imag
 
         # Combine the scaled real and imaginary parts to form the complex alpha value
-        return torch.complex(real_scaled, imag_scaled)
+        return torch.sin(omega * x)
 
     def forward(self, x):
         """
@@ -202,12 +202,8 @@ class wire_activation(nn.Module):
             LOGGER.debug("Applying finer adjustments")
             if x.is_complex():
                 LOGGER.debug("Applying complex finer adjustments")
-                # Generate the complex alpha value for finer adjustments
-                alpha = self.generate_complex_alpha(x)
-                # Modulate x with omega and complex alpha
-
-                LOGGER.debug("Applying complex sine function")
-                modulated_x = torch.sin(self.omega_f * alpha)
+                # Generate the complex alpha value with finer adjustments
+                modulated_x = self.generate_complex_alpha(x, self.omega_f)
             else:
                 LOGGER.debug("Applying real finer adjustments")
                 # Generate the alpha value for finer adjustments
@@ -217,8 +213,8 @@ class wire_activation(nn.Module):
 
             LOGGER.debug("Applying finer modulated wire activation function")
             # Apply the wire activation function with modulation
-            return torch.exp((1j * self.omega_w / self.omega_f * modulated_x) -
-                             torch.abs(self.scale / self.omega_f * modulated_x)**2)
+            return torch.exp((1j * (self.omega_w / self.omega_f) * modulated_x) -
+                             torch.abs((self.scale / self.omega_f) * modulated_x)**2)
         else:
             # Apply the standard wire activation function
             LOGGER.debug("Standard wire modulation")

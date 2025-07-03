@@ -4,8 +4,7 @@
 
 import torch
 import torch.nn as nn
-from torch.utils.hipify.hipify_python import mapping
-
+import numpy
 from helpers import get_logger
 from utils.activations import gaussian_activation
 from utils.Initializers import Initializer
@@ -171,7 +170,8 @@ class GaussianModel(nn.Module):
 ########################################################################################################################
 
 class GaussianFinerLayer(nn.Module):
-    def __init__(self, in_features, out_features, scale=30.0, omega_f=2.5, bias_init=1.0, weight_init=0.1):
+    def __init__(self, in_features, out_features, scale=30.0, omega_f=2.5,
+                 first_k=10, hidden_k=10, is_first=False):
         super().__init__()
         LOGGER.debug("GAUSSIAN FINER LAYER")
 
@@ -179,14 +179,15 @@ class GaussianFinerLayer(nn.Module):
         self.out_features = out_features
         self.scale = scale
         self.omega_f = omega_f
-        self.bias_init = bias_init
-        self.weight_init = weight_init
+        self.first_k = first_k
+        self.hidden_k = hidden_k
+        self.is_first = is_first
 
         # Define a linear layer
         self.linear = nn.Linear(in_features, out_features, bias=True)
 
         # Initialize weights
-        Initializer.gaussian_finer_init(self.linear, self.weight_init, self.bias_init)
+        Initializer.gaussian_finer_init(self.linear, self.in_features, self.omega_f, first_k=self.first_k, hidden_k=self.hidden_k)
         self.activation = gaussian_activation(with_finer=True, scale=scale, omega_f=omega_f)
 
 
@@ -199,7 +200,7 @@ class GaussianFinerLayer(nn.Module):
 
 
 class GaussianFinerResidualLayer(nn.Module):
-    def __init__(self, in_features, out_features, scale=30.0, omega_f=2.5, bias_init=1.0, weight_init=0.1):
+    def __init__(self, in_features, out_features, scale=30.0, omega_f=2.5, first_k=10, hidden_k=10):
         super().__init__()
         LOGGER.info("GAUSSIAN FINER RESIDUAL LAYER")
 
@@ -207,16 +208,15 @@ class GaussianFinerResidualLayer(nn.Module):
         self.out_features = out_features
         self.scale = scale
         self.omega_f = omega_f
-        self.bias_init = bias_init
-        self.weight_init = weight_init
-
+        self.first_k = first_k
+        self.hidden_k = hidden_k
         # Define a linear layer
         self.first_linear = nn.Linear(in_features, out_features, bias=True)
         self.last_linear = nn.Linear(out_features, out_features, bias=True)
 
         # Initialize weights
-        Initializer.gaussian_finer_init(self.first_linear, self.weight_init, self.bias_init)
-        Initializer.gaussian_finer_init(self.last_linear, self.weight_init, self.bias_init)
+        Initializer.gaussian_finer_init(self.first_linear, self.in_features, self.omega_f, first_k=self.first_k, hidden_k=self.hidden_k)
+        Initializer.gaussian_finer_init(self.last_linear, self.out_features, self.omega_f, first_k=self.first_k, hidden_k=self.hidden_k)
         self.activation = gaussian_activation(with_finer=True, scale=scale, omega_f=omega_f)
 
     def forward(self, x):
@@ -228,36 +228,44 @@ class GaussianFinerResidualLayer(nn.Module):
         return self.activation(out)
 
 class GaussianFinerModel(nn.Module):
-    def __init__(self, in_features, out_features, mapping_type="gauss", mapping_dim=4, mapping_scale=10, hidden_features=128, hidden_layers=5, final_bias=False, scale=30.0, omega_f=2.5, bias_init=1.0, weight_init=0.1, residual_net=False):
+    def __init__(self, in_features, out_features, mapping_type="gauss", mapping_dim=4, mapping_scale=10,
+                 hidden_features=128, hidden_layers=5, final_bias=False, scale=30.0, omega_f=2.5,
+                 first_k=10, hidden_k=10, residual_net=False):
         super().__init__()
         LOGGER.info("Initializing Gaussian Finer Model")
 
         # Initialize the network container
         self.net = []
-        # positional encoding
+        # positional encoding and first layer
+
         if mapping_type == 'no':
-            self.net.append(GaussianFinerLayer(in_features, hidden_features, scale=scale, omega_f=omega_f, bias_init=bias_init, weight_init=weight_init))
+            self.net.append(GaussianFinerLayer(in_features, hidden_features, scale=scale, omega_f=omega_f,
+                                               first_k=first_k, hidden_k=hidden_k, is_first=True))
         else:
             self.net.append(
             GaussianFourierFeatureTransform(type=mapping_type, input_dim=in_features, mapping_dim=mapping_dim,
                                             scale=mapping_scale))
 
             # Add the first Gaussian layer
-            self.net.append(GaussianFinerLayer(mapping_dim, hidden_features, scale=scale, omega_f=omega_f, bias_init=bias_init, weight_init=weight_init))
+            self.net.append(GaussianFinerLayer(mapping_dim, hidden_features, scale=scale, omega_f=omega_f,
+                                               first_k=first_k, hidden_k=hidden_k, is_first=True))
 
         # Add hidden layers
         for i in range(hidden_layers):
             if residual_net:
                 # Add a Gaussian residual layer if residual connections are enabled
-                self.net.append(GaussianFinerResidualLayer(hidden_features, hidden_features, scale=scale, omega_f=omega_f, bias_init=bias_init, weight_init=weight_init))
+                self.net.append(GaussianFinerResidualLayer(hidden_features, hidden_features, scale=scale,
+                                                           omega_f=omega_f, first_k=first_k, hidden_k=hidden_k))
             else:
                 # Add a standard Gaussian layer otherwise
-                self.net.append(GaussianFinerLayer(hidden_features, hidden_features, scale=scale, omega_f=omega_f, bias_init=bias_init, weight_init=weight_init))
+                self.net.append(GaussianFinerLayer(hidden_features, hidden_features, scale=scale, omega_f=omega_f,
+                                                   first_k=first_k, hidden_k=hidden_k))
 
         # Define and initialize the final linear layer
         final_layer = nn.Linear(hidden_features, out_features, bias=final_bias)
         with torch.no_grad():
-            nn.init.uniform_(final_layer.weight, -weight_init, weight_init)
+            bound = numpy.sqrt(6 / hidden_features) / omega_f
+            nn.init.uniform_(final_layer.weight, -bound, bound)
         self.net.append(final_layer)
 
         # Combine all layers into a sequential container

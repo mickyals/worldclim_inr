@@ -6,3 +6,4 @@
 *.log
 **/__pycache__/
 *.pyc
+__pycache__/helpers.cpython-312.pyc
