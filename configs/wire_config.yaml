@@ -1,0 +1,49 @@
+Optimizer:
+    name: 'torch.optim.Adam'
+    lr: 1.0e-4
+
+Dataset:
+  data_path: 'data/worldclim2.zarr'
+  points_path: '../coordinates.h5'
+  normalised_stats_path: '../normalized_stats.json'
+  data_key: 'land_coords' # 'ocean_coords'
+  shuffle: True
+  deg2rad: True
+
+
+
+Model:
+  WIRE_MODEL:
+    name: 'models.implicit_neural_representations.inr_models.wire_model.WireModel'
+    in_features: 2
+    out_features: 2
+    hidden_layers: 5
+    hidden_features: 128
+    bias: True
+    final_bias: False
+    mapping_type: 'gauss'
+    mapping_dim: 4
+    mapping_scale: 10.0
+    scale: 2.0
+    omega: 30.0
+    weight_init: 1.0  # distribution for weight initialization
+    bias_init: 0.1
+    residual_net: False # set true is using wire residual model
+    
+  WIRE_FINER_MODEL:
+    name: 'models.implicit_neural_representations.inr_models.wire_model.WireFinerModel'
+    in_features: 2
+    out_features: 2
+    hidden_layers: 5
+    hidden_features: 128
+    bias: True
+    final_bias: False
+    mapping_type: 'gauss'
+    mapping_dim: 4
+    mapping_scale: 10.0
+    scale: 2.0
+    omega: 30.0
+    first_k: 10
+    hidden_k: 10
+    omega_f: 2.5
+    residual_net: False
