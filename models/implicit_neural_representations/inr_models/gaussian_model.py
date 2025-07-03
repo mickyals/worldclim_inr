@@ -235,12 +235,15 @@ class GaussianFinerModel(nn.Module):
         # Initialize the network container
         self.net = []
         # positional encoding
-        self.net.append(
+        if mapping_type == 'no':
+            self.net.append(GaussianFinerLayer(in_features, hidden_features, scale=scale, omega_f=omega_f, bias_init=bias_init, weight_init=weight_init))
+        else:
+            self.net.append(
             GaussianFourierFeatureTransform(type=mapping_type, input_dim=in_features, mapping_dim=mapping_dim,
                                             scale=mapping_scale))
 
-        # Add the first Gaussian layer
-        self.net.append(GaussianFinerLayer(mapping_dim, hidden_features, scale=scale, omega_f=omega_f, bias_init=bias_init, weight_init=weight_init))
+            # Add the first Gaussian layer
+            self.net.append(GaussianFinerLayer(mapping_dim, hidden_features, scale=scale, omega_f=omega_f, bias_init=bias_init, weight_init=weight_init))
 
         # Add hidden layers
         for i in range(hidden_layers):

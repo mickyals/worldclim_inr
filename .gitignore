@@ -5,3 +5,4 @@
 /notebooks/*.log
 *.log
 **/__pycache__/
+*.pyc

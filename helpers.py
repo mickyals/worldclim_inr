@@ -80,4 +80,4 @@ def instantiate_from_config(config_dict):
 ###                      Model Summary                       ###
 # ==============================================================#
 def model_summary(model, input_size, verbose=1):
-    return summary(model.to('cpu'), input_size=input_size, device='cpu', verbose=verbose)
+    print(summary(model.to('cpu'), input_size=input_size, device='cpu', verbose=verbose))

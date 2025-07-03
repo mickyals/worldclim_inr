@@ -62,8 +62,14 @@ class Initializer:
 
 
     @staticmethod
-    def wire_init():
-        pass
+    def wire_init(linear_layer, weight_init, bias_init, bias):
+        LOGGER.debug("Initializing wire weights")
+
+        with torch.no_grad():
+            linear_layer.weight.uniform_(-weight_init, weight_init)
+            if bias and bias_init is not None:
+                linear_layer.bias.uniform_(-bias_init, bias_init)
+
 
     @staticmethod
     def wire_finer_init():
