@@ -4,16 +4,18 @@
 
 import torch
 import torch.nn as nn
-import numpy
-import torch.nn.functional as F
+from torch.utils.hipify.hipify_python import mapping
+
 from helpers import get_logger
-from models.implicit_neural_representations.activations import gaussian_activation
+from utils.activations import gaussian_activation
+from utils.Initializers import Initializer
+from utils.positional_encodings import GaussianFourierFeatureTransform
 
 LOGGER = get_logger(name = "GaussianModel", log_file="worldclim-dataset.log")
 
 
 class GaussianLayer(nn.Module):
-    def __init__(self, in_features, out_features, bias=True, scale=30.0, weight_init=0.1):
+    def __init__(self, in_features, out_features, bias=True, scale=30.0, weight_init=0.1, bias_init=None):
         """
         Initializes a GaussianLayer.
 
@@ -31,23 +33,15 @@ class GaussianLayer(nn.Module):
         self.out_features = out_features
         self.scale = scale
         self.weight_init = weight_init
+        self.bias_init = bias_init
         self.activation = gaussian_activation(self.scale)
 
         # Define the linear layer using nn.Linear
         self.linear = nn.Linear(in_features, out_features, bias=bias)
 
         # Initialize the weights of the linear layer
-        self._init_weights()
+        Initializer.gaussian_init(self.linear, self.weight_init, self.bias_init, bias)
 
-    def _init_weights(self):
-        """
-        Initializes the weights of the linear layer with a uniform distribution.
-
-        The weights are initialized to be in the range [-weight_init, weight_init].
-        """
-        with torch.no_grad():
-            # Initialize weights uniformly
-            nn.init.uniform_(self.linear.weight, -self.weight_init, self.weight_init)
 
     def forward(self, x):
         """
@@ -66,7 +60,7 @@ class GaussianLayer(nn.Module):
         return self.activation(out)
 
 class GaussianResidualLayer(nn.Module):
-    def __init__(self, in_features, out_features, bias=True, scale=30.0, weight_init=0.1):
+    def __init__(self, in_features, out_features, bias=True, scale=30.0, weight_init=0.1, bias_init=None):
         """
         Initializes a GaussianResidualLayer.
 
@@ -87,25 +81,18 @@ class GaussianResidualLayer(nn.Module):
         # Set scaling factor and weight initialization factor
         self.scale = scale
         self.weight_init = weight_init
+        self.bias_init = bias_init
 
         # Initialize the Gaussian activation function
         self.activation = gaussian_activation(self.scale)
 
         # Define the linear transformation layer
-        self.linear = nn.Linear(in_features, out_features, bias=bias)
+        self.first_linear = nn.Linear(in_features, out_features, bias=bias)
+        self.last_linear = nn.Linear(out_features, out_features, bias=bias)
 
         # Initialize the weights of the linear layer
-        self._init_weights()
-
-    def _init_weights(self):
-        """
-        Initializes the weights of the linear layer with a uniform distribution.
-
-        The weights are initialized to be in the range [-weight_init, weight_init].
-        """
-        with torch.no_grad():
-            # Initialize weights uniformly
-            nn.init.uniform_(self.linear.weight, -self.weight_init, self.weight_init)
+        Initializer.gaussian_init(self.first_linear, self.weight_init, self.bias_init, bias)
+        Initializer.gaussian_init(self.last_linear, self.weight_init, self.bias_init, bias)
 
     def forward(self, x):
         """
@@ -121,11 +108,14 @@ class GaussianResidualLayer(nn.Module):
             torch.Tensor: The output tensor after applying the GaussianResidualLayer.
         """
         LOGGER.debug("FORWARD PASS")
-        out = self.linear(x)
-        return self.activation(out) + x
+        out = self.first_linear(x)
+        first_activation = self.activation(out)
+        out = self.last_linear(first_activation)
+        out = out + x
+        return self.activation(out)
 
 class GaussianModel(nn.Module):
-    def __init__(self, in_features, out_features, hidden_features=128, hidden_layers=5, bias=True, final_bias=False, scale=30.0, weight_init=0.1, residual_net=False):
+    def __init__(self, in_features, out_features, mapping_type="gauss", mapping_dim=4, mapping_scale=10, hidden_features=128, hidden_layers=5, bias=True, final_bias=False, scale=30.0, weight_init=0.1, bias_init=None, residual_net=False):
         """
         Initializes the GaussianModel with the specified parameters.
 
@@ -143,20 +133,24 @@ class GaussianModel(nn.Module):
         super().__init__()
         LOGGER.info("Initializing Gaussian Model")
 
+
         # Initialize the network container
         self.net = []
 
+        # positional encoding
+        self.net.append(GaussianFourierFeatureTransform(type=mapping_type, input_dim=in_features, mapping_dim=mapping_dim, scale=mapping_scale))
+
         # Add the first Gaussian layer
-        self.net.append(GaussianLayer(in_features, hidden_features, bias=bias, scale=scale, weight_init=weight_init))
+        self.net.append(GaussianLayer(mapping_dim, hidden_features, bias=bias, scale=scale, weight_init=weight_init, bias_init=bias_init))
 
         # Add hidden layers
         for i in range(hidden_layers):
             if residual_net:
                 # Add a Gaussian residual layer if residual connections are enabled
-                self.net.append(GaussianResidualLayer(hidden_features, hidden_features, bias=bias, scale=scale, weight_init=weight_init))
+                self.net.append(GaussianResidualLayer(hidden_features, hidden_features, bias=bias, scale=scale, weight_init=weight_init, bias_init=bias_init))
             else:
                 # Add a standard Gaussian layer otherwise
-                self.net.append(GaussianLayer(hidden_features, hidden_features, bias=bias, scale=scale, weight_init=weight_init))
+                self.net.append(GaussianLayer(hidden_features, hidden_features, bias=bias, scale=scale, weight_init=weight_init, bias_init=bias_init))
 
         # Define and initialize the final linear layer
         final_layer = nn.Linear(hidden_features, out_features, bias=final_bias)
@@ -192,14 +186,9 @@ class GaussianFinerLayer(nn.Module):
         self.linear = nn.Linear(in_features, out_features, bias=True)
 
         # Initialize weights
-        self._init_weights()
+        Initializer.gaussian_finer_init(self.linear, self.weight_init, self.bias_init)
         self.activation = gaussian_activation(with_finer=True, scale=scale, omega_f=omega_f)
 
-
-    def _init_weights(self):
-        with torch.no_grad():
-            self.linear.weight.uniform_(-self.weight_init, self.weight_init)
-            self.linear.bias.uniform_(-self.bias_init, self.bias_init)
 
 
     def forward(self, x):
@@ -222,32 +211,36 @@ class GaussianFinerResidualLayer(nn.Module):
         self.weight_init = weight_init
 
         # Define a linear layer
-        self.linear = nn.Linear(in_features, out_features, bias=True)
+        self.first_linear = nn.Linear(in_features, out_features, bias=True)
+        self.last_linear = nn.Linear(out_features, out_features, bias=True)
 
         # Initialize weights
-        self._init_weights()
+        Initializer.gaussian_finer_init(self.first_linear, self.weight_init, self.bias_init)
+        Initializer.gaussian_finer_init(self.last_linear, self.weight_init, self.bias_init)
         self.activation = gaussian_activation(with_finer=True, scale=scale, omega_f=omega_f)
-
-    def _init_weights(self):
-        with torch.no_grad():
-            self.linear.weight.uniform_(-self.weight_init, self.weight_init)
-            self.linear.bias.uniform_(-self.bias_init, self.bias_init)
 
     def forward(self, x):
         LOGGER.debug("FORWARD PASS")
-        out = self.linear(x)
-        return self.activation(out) + x
+        out = self.first_linear(x)
+        first_activation = self.activation(out)
+        out = self.last_linear(first_activation)
+        out = out + x
+        return self.activation(out)
 
 class GaussianFinerModel(nn.Module):
-    def __init__(self, in_features, out_features, hidden_features=128, hidden_layers=5, final_bias=False, scale=30.0, omega_f=2.5, bias_init=1.0, weight_init=0.1, residual_net=False):
+    def __init__(self, in_features, out_features, mapping_type="gauss", mapping_dim=4, mapping_scale=10, hidden_features=128, hidden_layers=5, final_bias=False, scale=30.0, omega_f=2.5, bias_init=1.0, weight_init=0.1, residual_net=False):
         super().__init__()
         LOGGER.info("Initializing Gaussian Finer Model")
 
         # Initialize the network container
         self.net = []
+        # positional encoding
+        self.net.append(
+            GaussianFourierFeatureTransform(type=mapping_type, input_dim=in_features, mapping_dim=mapping_dim,
+                                            scale=mapping_scale))
 
         # Add the first Gaussian layer
-        self.net.append(GaussianFinerLayer(in_features, hidden_features, scale=scale, omega_f=omega_f, bias_init=bias_init, weight_init=weight_init))
+        self.net.append(GaussianFinerLayer(mapping_dim, hidden_features, scale=scale, omega_f=omega_f, bias_init=bias_init, weight_init=weight_init))
 
         # Add hidden layers
         for i in range(hidden_layers):

@@ -20,19 +20,26 @@ Dataset:
 Model:
   GAUSSIAN_MODEL:
     name: 'models.implicit_neural_representations.inr_models.siren_model.GaussianModel'
-    in_features:
-    out_features:
+    in_features: 2
+    out_features: 2
+    mapping_type: 'gaussian'
+    mapping_dim: 4
+    mapping_scale: 10.0
     hidden_features: 128
     hidden_layers: 5
     final_bias: False
     scale: 30.0
     weight_init: 0.1
+    bias_init: 1.0
     residual_net: False
 
   GAUSSIAN_FINER_MODEL:
     name: 'models.implicit_neural_representations.inr_models.siren_model.GaussianFinerModel'
-    in_features:
-    out_features:
+    in_features: 2
+    out_features: 2
+    mapping_type: 'gaussian'
+    mapping_dim: 2
+    mapping_scale: 10.0
     hidden_features: 128
     hidden_layers: 5
     final_bias: False

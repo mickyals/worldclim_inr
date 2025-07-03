@@ -57,7 +57,7 @@ class siren_activation(nn.Module):
             # Generate alpha for finer adjustments
             alpha = self.generate_alpha(x)
             # Modulate x with omega and alpha
-            mod_x = alpha * x
+            mod_x = self.omega_f * alpha * x
         else:
             LOGGER.debug("Applying SIREN adjustments")
             # Modulate x with omega
@@ -69,7 +69,7 @@ class siren_activation(nn.Module):
 
 
 class gaussian_activation(nn.Module):
-    def __init__(self, scale, with_finer=False, omega_f=1):
+    def __init__(self, scale, with_finer=False, omega_f=2.5):
         """
         Initializes the activation function with the given parameters.
 
@@ -130,7 +130,7 @@ class gaussian_activation(nn.Module):
 
 
 class wire_activation(nn.Module):
-    def __init__(self, scale, omega_w, with_finer=False, omega_f=1 ):
+    def __init__(self, scale, omega_w, with_finer=False, omega_f=2.5):
         """
         Initializes the wire activation function with the given parameters.
 

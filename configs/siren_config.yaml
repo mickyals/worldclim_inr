@@ -35,6 +35,6 @@ Model:
     final_bias: False
     first_omega_0: 30.0
     hidden_omega_0: 30.0  # scaling factor
-    first_bias: 1.0 # higher bias values give large range of frequencies
-    hidden_bias: 1.0
+    first_k: 1.0 # higher bias values give large range of frequencies
+    hidden_k: 1.0
     residual_net: False # set true is using finer residual model

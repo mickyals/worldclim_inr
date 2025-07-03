@@ -49,7 +49,7 @@ class BaseINR(pl.LightningModule):
         predictions = self.foward(inputs)
 
         loss = self.loss(predictions, targets) # need to define loss functions/scripts
-        self.log("train_loss", loss, on_step=True, on_epoch=True) #consider incorportation within loss functions/scripts
+        self.log("train_loss", loss, on_step=True, on_epoch=True) #consider incorporation within loss functions/scripts
         return loss
 
 

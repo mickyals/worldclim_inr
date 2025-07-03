@@ -5,9 +5,10 @@
 import torch
 import torch.nn as nn
 import numpy
-import torch.nn.functional as F
 from helpers import get_logger
-from models.implicit_neural_representations.activations import siren_activation
+from utils.activations import siren_activation
+from utils.Initializers import Initializer
+
 
 LOGGER = get_logger(name = "SirenModel", log_file="worldclim-dataset.log")
 
@@ -33,29 +34,9 @@ class SirenLayer(nn.Module):
         self.activation = siren_activation(self.omega_0)
 
         self.linear = nn.Linear(in_features, out_features, bias=bias)
-        self._init_weights()
+        Initializer.siren_init(self.linear, in_features, is_first, omega_0)
 
-    def _init_weights(self):
-        """
-        Initializes the weights of the linear layer.
 
-        Depending on whether the layer is the first in the network or a hidden layer,
-        it applies a different initialization strategy to the weights.
-
-        Logging is used to trace the initialization process.
-        """
-        LOGGER.info("Initializing weights")
-        with torch.no_grad():
-            if self.is_first:
-                # Initialize the weights for the first layer with a uniform distribution
-                LOGGER.info("Initializing first weights")
-                self.linear.weight.uniform_(-1 / self.in_features,
-                                            1 / self.in_features)
-            else:
-                # Initialize the weights for hidden layers with a scaled uniform distribution
-                LOGGER.info("Initializing hidden weights")
-                bound = numpy.sqrt(6 / self.in_features) / self.omega_0
-                self.linear.weight.uniform_(-bound, bound)
 
 
     def forward(self, x):
@@ -77,9 +58,8 @@ class SirenLayer(nn.Module):
         return self.activation(out)
 
 
-
 class SirenResidualLayer(nn.Module):
-    def __init__(self, in_features, out_features, bias=True, omega_0=30.):
+    def __init__(self, in_features, out_features, bias=True, omega_0=30., is_first=False):
         """
         Initializes the SirenResidualLayer.
 
@@ -97,21 +77,12 @@ class SirenResidualLayer(nn.Module):
         self.activation = siren_activation(self.omega_0)
 
         # Define a linear layer
-        self.linear = nn.Linear(in_features, out_features, bias=bias)
+        self.first_linear = nn.Linear(in_features, out_features, bias=bias)
+        self.last_linear = nn.Linear(out_features, out_features, bias=bias)
         # Initialize weights
-        self._init_weights()
+        Initializer.siren_init(self.first_linear, in_features, is_first, omega_0)
+        Initializer.siren_init(self.last_linear, in_features, is_first, omega_0)
 
-    def _init_weights(self):
-        """
-        Initializes the weights of the linear layer using the uniform distribution.
-
-        The weights are initialized to be in the range [-bound, bound].
-        """
-        LOGGER.info("Initialzing weights")
-        with torch.no_grad():
-            # Calculate the bound for the uniform distribution
-            bound = numpy.sqrt(6/self.in_features)/self.omega_0
-            self.linear.weight.uniform_(-bound, bound)
 
 
     def forward(self, x):
@@ -126,9 +97,13 @@ class SirenResidualLayer(nn.Module):
         """
         LOGGER.info("SIREN RESIDUAL LAYER")
         # Apply the linear layer and siren activation, then add the input tensor for residual connection
-        out = self.linear(x)
-        return self.activation(out) + x
+        out = self.first_linear(x)
+        first_activation = self.activation(out)
 
+        out = self.last_linear(first_activation)
+        out = out + x
+
+        return self.activation(out)
 
 
 class SirenModel(nn.Module):
@@ -184,12 +159,11 @@ class SirenModel(nn.Module):
         return self.net(x)
 
 
-
 ###### FINER LAYERS
 
 
 class FinerLayer(nn.Module):
-    def __init__(self, in_features, out_features, bias=True, omega_0=30.0, is_first=False, is_last=False, first_bias=None, hidden_bias=None):
+    def __init__(self, in_features, out_features, bias=True, omega_0=30.0, is_first=False, is_last=False, first_k=10, hidden_k=10):
         """
         Initializes a layer with configurable features and biases.
 
@@ -214,43 +188,14 @@ class FinerLayer(nn.Module):
         self.is_first = is_first
         self.is_last = is_last
         # Bias values
-        self.first_bias = first_bias
-        self.hidden_bias = hidden_bias
+        self.first_k = first_k
+        self.hidden_k = hidden_k
         self.activation = siren_activation(self.omega_0, with_finer=True)
 
         # Define a linear layer
         self.linear = nn.Linear(in_features, out_features, bias=bias)
         # Initialize weights
-        self._init_weights()
-        # Initialize bias if applicable
-        if bias:
-            self._init_bias()
-
-    def _init_weights(self):
-        """
-        Initializes the weights of the linear layer.
-        """
-        with torch.no_grad():
-            # Initialize the weights of the first layer
-            if self.is_first:
-                self.linear.weight.uniform_(-1 / self.in_features,
-                                            1 / self.in_features)
-            else:
-                # Initialize the weights of the hidden layers
-                bound = numpy.sqrt(6/self.in_features)/self.omega_0
-                self.linear.weight.uniform_(-bound, bound)
-
-    def _init_bias(self):
-        """
-        Initializes the bias of the linear layer.
-        """
-        with torch.no_grad():
-            if self.is_first and self.first_bias is not None:
-                # Initialize the bias of the first layer
-                self.linear.bias.uniform_(-self.first_bias, self.first_bias)
-            elif not self.is_first and self.hidden_bias is not None:
-                # Initialize the bias of the hidden layers
-                self.linear.bias.uniform_(-self.hidden_bias, self.hidden_bias)
+        Initializer.finer_init(self.linear, in_features, is_first=self.is_first, omega_0=self.omega_0, first_k=self.first_k, hidden_k=self.hidden_k)
 
     def forward(self, x):
         """
@@ -269,7 +214,7 @@ class FinerLayer(nn.Module):
         return self.activation(out)
 
 class FinerResidualLayer(nn.Module):
-    def __init__(self, in_features, out_features, bias=True, omega_0=30.0, hidden_bias=None):
+    def __init__(self, in_features, out_features, bias=True, omega_0=30.0, hidden_k=10):
         """
         Initializes a FinerResidualLayer.
 
@@ -286,30 +231,13 @@ class FinerResidualLayer(nn.Module):
         self.in_features = in_features
         self.out_features = out_features
         self.omega_0 = omega_0
-        self.hidden_bias = hidden_bias
+        self.hidden_k = hidden_k
         self.activation = siren_activation(self.omega_0, with_finer=True)
 
-        self.linear = nn.Linear(in_features, out_features, bias=bias)
-        self._init_weights()
-        if bias and hidden_bias is not None:
-            self._init_bias()
-
-    def _init_weights(self):
-        """
-        Initializes the weights of the linear layer.
-        """
-        LOGGER.info("FINER RESIDUAL LAYER")
-        with torch.no_grad():
-            bound = numpy.sqrt(6/self.in_features)/self.omega_0
-            self.linear.weight.uniform_(-bound, bound)
-
-    def _init_bias(self):
-        """
-        Initializes the bias of the linear layer.
-        """
-        LOGGER.info("initializing bias")
-        with torch.no_grad():
-            self.linear.bias.uniform_(-self.hidden_bias, self.hidden_bias)
+        self.first_linear = nn.Linear(in_features, out_features, bias=bias)
+        self.last_linear = nn.Linear(out_features, out_features, bias=bias)
+        Initializer.finer_init(self.first_linear, in_features, is_first=False, omega_0=self.omega_0, hidden_k=self.hidden_k)
+        Initializer.finer_init(self.last_linear, out_features, is_first=False, omega_0=self.omega_0, hidden_k=self.hidden_k)
 
     def forward(self, x):
         """
@@ -322,12 +250,15 @@ class FinerResidualLayer(nn.Module):
             torch.Tensor: The output tensor after applying the FinerResidualLayer.
         """
         LOGGER.debug("FINER RESIDUAL LAYER")
-        out = self.linear(x)
-        return self.activation(out) + x
+        out = self.first_linear(x)
+        first_activation = self.activation(out)
+        out = self.last_linear(first_activation)
+        out = out + x
+        return self.activation(out)
 
 class FinerModel(nn.Module):
     def __init__(self, in_features=2, out_features=2, bias=True, final_bias=False, hidden_layers=5, hidden_features=128, first_omega_0=30., hidden_omega_0=30.,
-                 first_bias=None, hidden_bias=None, residual_net=False):
+                 first_k=None, hidden_k=None, residual_net=False):
         """
         Initializes the FinerModel.
 
@@ -346,18 +277,19 @@ class FinerModel(nn.Module):
         super().__init__()
 
         LOGGER.info("INITIALIZING FINER MODEL")
+        assert bias, "Bias must be True for FinerModel"
         self.net = []
-        self.net.append(FinerLayer(in_features, hidden_features, bias=bias, is_first=True, omega_0=first_omega_0, first_bias=first_bias))
+        self.net.append(FinerLayer(in_features, hidden_features, bias=bias, is_first=True, omega_0=first_omega_0, first_k=first_k))
 
         for i in range(hidden_layers):
             # build the hidden layers
             LOGGER.info("BUILDING FINER MODEL")
             if residual_net:
                 LOGGER.info(f"RESIDUAL LAYER {i}")
-                self.net.append(FinerResidualLayer(hidden_features, hidden_features, bias=True, omega_0=hidden_omega_0, hidden_bias=hidden_bias))
+                self.net.append(FinerResidualLayer(hidden_features, hidden_features, bias=True, omega_0=hidden_omega_0, hidden_k=hidden_k))
             else:
                 LOGGER.info(f"NORMAL LAYER {i}")
-                self.net.append(FinerLayer(hidden_features, hidden_features, bias=True, is_first=False, omega_0=hidden_omega_0, hidden_bias=hidden_bias))
+                self.net.append(FinerLayer(hidden_features, hidden_features, bias=True, is_first=False, omega_0=hidden_omega_0, hidden_k=hidden_k))
 
         # build the final layer
         final_layer = nn.Linear(hidden_features, out_features, bias=final_bias)

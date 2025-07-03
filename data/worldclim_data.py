@@ -458,7 +458,6 @@ class WorldClimDataset(IterableDataset):
         if self.deg2rad:
             # Iterate over the points in the dataset and yield the input and output tensors
             for y, x in self._get_points():
-                sample = {}
 
                 # Get the raw data at the point
                 raw_data = self.data[self.var_list].sel(x=x, y=y, method='nearest').to_array().values

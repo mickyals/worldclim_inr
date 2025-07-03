@@ -7,6 +7,7 @@ import os
 import datetime
 import logging
 import importlib
+from torchinfo import summary
 
 
 # ==============================================================#
@@ -72,3 +73,11 @@ def instantiate_from_config(config_dict):
     module = importlib.import_module(module_path)
     cls = getattr(module, class_name)
     return cls(config_dict)
+
+
+
+# ==============================================================#
+###                      Model Summary                       ###
+# ==============================================================#
+def model_summary(model, input_size, verbose=1):
+    return summary(model.to('cpu'), input_size=input_size, device='cpu', verbose=verbose)
