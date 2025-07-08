@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+import numpy
+import math
 from helpers import get_logger
 
 LOGGER = get_logger(name = "PositionalEncodings", log_file="worldclim-dataset.log")
@@ -40,3 +42,68 @@ class GaussianFourierFeatureTransform(nn.Module):
             mapping_dim = mapping_dim
 
         return mapping_dim
+
+class SphericalFourierFeatureTransform(nn.Module):
+    def __init__(self,  omegas: list[float], scale: list[int] ):
+        super().__init__()
+
+        # coords = [lat, lon]
+        # omegas = [omega_lat, omega_lon]
+        # scale = [scale_lat, scale_lon]
+
+        # general function for positional encoding is sin(omega_lat^(scale_lat_i/(len(scale_lat)) - 1) * lat)
+
+        self.omega_lat, self.omega_lon = omegas
+        self.scale_lat, self.scale_lon = scale
+
+        self.freq_lat = self._compute_freq(self.omega_lat, self.scale_lat)
+        self.freq_lon = self._compute_freq(self.omega_lon, self.scale_lon)
+
+    def _compute_freq(self, omega, scale):
+        if scale == 1:
+            return torch.ones(1)
+        s = torch.arange(scale)
+        return omega ** (s / (scale - 1))
+
+
+    def forward(self, coords):
+
+        # coords = [lat, lon]
+        B = coords.shape[0]
+        lat = coords[:, 0] * (torch.pi / 180) # shape [B]
+        lon = coords[:, 1] * (torch.pi / 180) # shape [B]
+
+        # scaled lat and lon
+        lat_scaled = 2 * torch.pi * lat.unsqueeze(1) * self.freq_lat.unsqueeze(0) # shape [B, scale_lat]
+        lon_scaled = 2 * torch.pi * lon.unsqueeze(1) * self.freq_lon.unsqueeze(0) # shape [B, scale_lon]
+
+        # sin and cos of scaled lat and lon
+        sin_lat = torch.sin(lat_scaled) # shape [B, scale_lat]
+        cos_lat = torch.cos(lat_scaled) # shape [B, scale_lat]
+        sin_lon = torch.sin(lon_scaled) # shape [B, scale_lon]
+        cos_lon = torch.cos(lon_scaled) # shape [B, scale_lon]
+
+        # basic positions
+        lat_terms = torch.cat([sin_lat, cos_lat], dim=-1) # shape [B, 2 * scale_lat]
+        lon_terms = torch.cat([sin_lon, cos_lon], dim=-1) # shape [B, 2 * scale_lon]
+
+        # interaction terms
+        lat_expanded = lat_terms.unsqueeze(-1) # shape [B, 2 * scale_lat, 1]
+        lon_expanded = lon_terms.unsqueeze(1) # shape [B, 1, 2 * scale_lon]
+        interaction = lat_expanded * lon_expanded # shape [B, 2 * scale_lat, 2 * scale_lon]
+
+        interaction = interaction.view(B, -1) # shape [B, 4 * scale_lat * scale_lon]
+
+
+        output = torch.cat([lat_terms, lon_terms, interaction], dim=-1)  # [B, total_dim]
+        return output
+
+
+
+
+
+
+
+
+
+
