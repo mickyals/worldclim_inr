@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from helpers import get_logger
+from helpers import get_logger, set_device
 
 LOGGER = get_logger(name = "PositionalEncodings", log_file="worldclim-dataset.log")
 
@@ -54,7 +54,7 @@ class GaussianFourierFeatureTransform(nn.Module):
 #######################################################################################################################
 
 class SphericalFourierFeatureTransform(nn.Module):
-    def __init__(self,  r_min:float, r_max: float, scale: list[int] ):
+    def __init__(self,  r_min:float, r_max: float, scale: list[int]):
         """
         Initialize the spherical positional encoding.
 
@@ -110,6 +110,8 @@ class SphericalFourierFeatureTransform(nn.Module):
         # coords = [lat, lon]
 
         LOGGER.debug("Computing the spherical positional encoding.")
+
+
         B = coords.shape[0]
         lat = coords[:, 0] * (torch.pi / 180)  # shape [B]
         lon = coords[:, 1] * (torch.pi / 180)  # shape [B]
