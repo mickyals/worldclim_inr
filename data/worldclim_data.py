@@ -309,7 +309,6 @@ class WorldClimDataset(IterableDataset):
         self.normalised_stats_path = config['normalised_stats_path']
         self.key = config.get('data_key', 'land_coords')
         self.shuffle = config.get('shuffle', True)
-        self.deg2rad = config.get('deg2rad', True)
 
         # Load the dataset from the specified data path
         self.data = self._get_data()
@@ -410,25 +409,7 @@ class WorldClimDataset(IterableDataset):
         """
         LOGGER.info("NORMALIZING DATA")
         return 2 * (raw_data_tensor - min_tensor) / (max_tensor - min_tensor) - 1
-
-    def _coords_to_radians(self, x, y):
-        """
-        Converts coordinates from degrees to radians and returns them as a PyTorch tensor.
-
-        Args:
-            x (float): The x-coordinate in degrees.
-            y (float): The y-coordinate in degrees.
-
-        Returns:
-            torch.Tensor: A tensor containing the x and y coordinates in radians. Shape: (2, 1)
-        """
-        LOGGER.info("CONVERTING COORDINATES TO RADIANS")
-        # Convert x and y from degrees to radians
-        x_rad = numpy.radians(x)
-        y_rad = numpy.radians(y)
-
-        # Return the coordinates as a PyTorch tensor
-        return torch.tensor([[x_rad], [y_rad]])  # shape (2, 1)
+  # shape (2, 1)
 
 
     def __len__(self):
@@ -454,44 +435,24 @@ class WorldClimDataset(IterableDataset):
         """
 
         min_tensor, max_tensor = self._get_normalised_stats()
+        # Iterate over the points in the dataset and yield the input and output tensors
+        for y, x in self._get_points():
+            sample = {}
 
-        if self.deg2rad:
-            # Iterate over the points in the dataset and yield the input and output tensors
-            for y, x in self._get_points():
+            # Get the raw data at the point
+            raw_data = self.data[self.var_list].sel(x=x, y=y, method='nearest').to_array().values
 
-                # Get the raw data at the point
-                raw_data = self.data[self.var_list].sel(x=x, y=y, method='nearest').to_array().values
+            # Convert the raw data to a PyTorch tensor
+            raw_data = torch.tensor(raw_data)
 
-                # Convert the raw data to a PyTorch tensor
-                raw_data = torch.tensor(raw_data)
+            # Normalize the data using the minimum and maximum values
+            normalized_data = self._normalize_data(raw_data, min_tensor, max_tensor)
 
-                # Normalize the data using the minimum and maximum values
-                normalized_data = self._normalize_data(raw_data, min_tensor, max_tensor)
+            # Get the coordinates as is
+            input_tensor = torch.tensor([[x,y]]) # shape (2, 1)
 
-                # Get the coordinates in radians
-                input_tensor = self._coords_to_radians(x, y)
-
-                # Yield the input and output tensors
-                yield {'input': input_tensor, 'target': normalized_data}
-        else:
-            # Iterate over the points in the dataset and yield the input and output tensors
-            for y, x in self._get_points():
-                sample = {}
-
-                # Get the raw data at the point
-                raw_data = self.data[self.var_list].sel(x=x, y=y, method='nearest').to_array().values
-
-                # Convert the raw data to a PyTorch tensor
-                raw_data = torch.tensor(raw_data)
-
-                # Normalize the data using the minimum and maximum values
-                normalized_data = self._normalize_data(raw_data, min_tensor, max_tensor)
-
-                # Get the coordinates as is
-                input_tensor = torch.tensor([[x,y]]) # shape (2, 1)
-
-                # Yield the input and output tensors
-                yield {'input': input_tensor, 'target': normalized_data}
+            # Yield the input and output tensors
+            yield {'input': input_tensor, 'target': normalized_data}
 
 
 

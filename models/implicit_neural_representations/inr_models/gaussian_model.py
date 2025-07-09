@@ -8,7 +8,7 @@ import numpy
 from helpers import get_logger
 from utils.activations import gaussian_activation
 from utils.Initializers import Initializer
-from utils.positional_encodings import GaussianFourierFeatureTransform
+from utils.positional_encodings import ENCODER_REGISTRY
 
 LOGGER = get_logger(name = "GaussianModel", log_file="worldclim-dataset.log")
 
@@ -114,7 +114,9 @@ class GaussianResidualLayer(nn.Module):
         return self.activation(out)
 
 class GaussianModel(nn.Module):
-    def __init__(self, in_features, out_features, mapping_type="gauss", mapping_dim=4, mapping_scale=10, hidden_features=128, hidden_layers=5, bias=True, final_bias=False, scale=30.0, weight_init=0.1, bias_init=None, residual_net=False):
+    def __init__(self, in_features, out_features, hidden_features=128, hidden_layers=5,
+                 bias=True, final_bias=False, scale_gaussian=30.0, weight_init=0.1, bias_init=None,
+                 residual_net=False, encoding=None, **encoder_kwargs):
         """
         Initializes the GaussianModel with the specified parameters.
 
@@ -136,20 +138,28 @@ class GaussianModel(nn.Module):
         # Initialize the network container
         self.net = []
 
-        # positional encoding
-        self.net.append(GaussianFourierFeatureTransform(type=mapping_type, input_dim=in_features, mapping_dim=mapping_dim, scale=mapping_scale))
+        # positional encoder
+        if encoding is None:
+            self.encoder = nn.Identity()
+            encoded_dim = in_features
+        else:
+            encoder_cls = ENCODER_REGISTRY[encoding]
+            self.encoder = encoder_cls(**encoder_kwargs)
+            with torch.no_grad():
+                dummy_input = torch.zeros(1, in_features)
+                encoded_dim = self.encoder(dummy_input).shape[-1]
 
         # Add the first Gaussian layer
-        self.net.append(GaussianLayer(mapping_dim, hidden_features, bias=bias, scale=scale, weight_init=weight_init, bias_init=bias_init))
+        self.net.append(GaussianLayer(encoded_dim, hidden_features, bias=bias, scale=scale_gaussian, weight_init=weight_init, bias_init=bias_init))
 
         # Add hidden layers
         for i in range(hidden_layers):
             if residual_net:
                 # Add a Gaussian residual layer if residual connections are enabled
-                self.net.append(GaussianResidualLayer(hidden_features, hidden_features, bias=bias, scale=scale, weight_init=weight_init, bias_init=bias_init))
+                self.net.append(GaussianResidualLayer(hidden_features, hidden_features, bias=bias, scale=scale_gaussian, weight_init=weight_init, bias_init=bias_init))
             else:
                 # Add a standard Gaussian layer otherwise
-                self.net.append(GaussianLayer(hidden_features, hidden_features, bias=bias, scale=scale, weight_init=weight_init, bias_init=bias_init))
+                self.net.append(GaussianLayer(hidden_features, hidden_features, bias=bias, scale=scale_gaussian, weight_init=weight_init, bias_init=bias_init))
 
         # Define and initialize the final linear layer
         final_layer = nn.Linear(hidden_features, out_features, bias=final_bias)
@@ -162,6 +172,7 @@ class GaussianModel(nn.Module):
 
     def forward(self, x):
         LOGGER.debug("FORWARD PASS")
+        x = self.encoder(x)
         return self.net(x)
 
 
@@ -228,37 +239,38 @@ class GaussianFinerResidualLayer(nn.Module):
         return self.activation(out)
 
 class GaussianFinerModel(nn.Module):
-    def __init__(self, in_features, out_features, mapping_type="gauss", mapping_dim=4, mapping_scale=10,
-                 hidden_features=128, hidden_layers=5, final_bias=False, scale=30.0, omega_f=2.5,
-                 first_k=10, hidden_k=10, residual_net=False):
+    def __init__(self, in_features, out_features, hidden_features=128, hidden_layers=5,
+                 final_bias=False, scale_gaussian=30.0, omega_f=2.5, first_k=10, hidden_k=10, residual_net=False,
+                 encoding=None, **encoder_kwargs):
         super().__init__()
         LOGGER.info("Initializing Gaussian Finer Model")
 
         # Initialize the network container
         self.net = []
-        # positional encoding and first layer
 
-        if mapping_type == 'no':
-            self.net.append(GaussianFinerLayer(in_features, hidden_features, scale=scale, omega_f=omega_f,
-                                               first_k=first_k, hidden_k=hidden_k, is_first=True))
+        # positional encoder
+        if encoding is None:
+            self.encoder = nn.Identity()
+            encoded_dim = in_features
         else:
-            self.net.append(
-            GaussianFourierFeatureTransform(type=mapping_type, input_dim=in_features, mapping_dim=mapping_dim,
-                                            scale=mapping_scale))
+            encoder_cls = ENCODER_REGISTRY[encoding]
+            self.encoder = encoder_cls(**encoder_kwargs)
+            with torch.no_grad():
+                dummy_input = torch.zeros(1, in_features)
+                encoded_dim = self.encoder(dummy_input).shape[-1]
 
-            # Add the first Gaussian layer
-            self.net.append(GaussianFinerLayer(mapping_dim, hidden_features, scale=scale, omega_f=omega_f,
+        self.net.append(GaussianFinerLayer(encoded_dim, hidden_features, scale=scale_gaussian, omega_f=omega_f,
                                                first_k=first_k, hidden_k=hidden_k, is_first=True))
 
         # Add hidden layers
         for i in range(hidden_layers):
             if residual_net:
                 # Add a Gaussian residual layer if residual connections are enabled
-                self.net.append(GaussianFinerResidualLayer(hidden_features, hidden_features, scale=scale,
+                self.net.append(GaussianFinerResidualLayer(hidden_features, hidden_features, scale=scale_gaussian,
                                                            omega_f=omega_f, first_k=first_k, hidden_k=hidden_k))
             else:
                 # Add a standard Gaussian layer otherwise
-                self.net.append(GaussianFinerLayer(hidden_features, hidden_features, scale=scale, omega_f=omega_f,
+                self.net.append(GaussianFinerLayer(hidden_features, hidden_features, scale=scale_gaussian, omega_f=omega_f,
                                                    first_k=first_k, hidden_k=hidden_k))
 
         # Define and initialize the final linear layer
@@ -273,4 +285,5 @@ class GaussianFinerModel(nn.Module):
 
     def forward(self, x):
         LOGGER.debug("FORWARD PASS")
+        x = self.encoder(x)
         return self.net(x)

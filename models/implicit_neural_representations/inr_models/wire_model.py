@@ -8,7 +8,7 @@ import numpy
 from helpers import get_logger
 from utils.activations import wire_activation
 from utils.Initializers import Initializer
-from utils.positional_encodings import GaussianFourierFeatureTransform
+from utils.positional_encodings import ENCODER_REGISTRY
 
 
 LOGGER = get_logger(name = "WireModel", log_file="worldclim-dataset.log")
@@ -70,33 +70,36 @@ class WireResidualLayer(nn.Module):
 
 
 class WireModel(nn.Module):
-    def __init__(self, in_features, out_features, mapping_type='gauss', mapping_dim=4, mapping_scale=10, hidden_layers=5,hidden_features=256,
-                 bias=True, final_bias=False, scale=2.0, omega=30.0, weight_init=1.0, bias_init=0.1, residual_net=False):
+    def __init__(self, in_features, out_features, hidden_layers=5,hidden_features=256, bias=True, final_bias=False,
+                 scale_wire=2.0, omega=30.0, weight_init=1.0, bias_init=0.1, residual_net=False, encoding=None,
+                 **encoder_kwargs):
         super().__init__()
         LOGGER.debug("Initializing WireModel")
 
         self.net = []
 
-        #positional encoding
-        if mapping_type == 'no':
-            LOGGER.debug("No positional encoding")
-            self.net.append(WireLayer(in_features, hidden_features, scale, omega, bias, weight_init, bias_init, dtype=torch.float))
+        # positional encoder
+        if encoding is None:
+            self.encoder = nn.Identity()
+            encoded_dim = in_features
         else:
-            LOGGER.debug("Using positional encoding")
-            self.net.append(
-            GaussianFourierFeatureTransform(type=mapping_type, input_dim=in_features, mapping_dim=mapping_dim, scale=mapping_scale))
+            encoder_cls = ENCODER_REGISTRY[encoding]
+            self.encoder = encoder_cls(**encoder_kwargs)
+            with torch.no_grad():
+                dummy_input = torch.zeros(1, in_features)
+                encoded_dim = self.encoder(dummy_input).shape[-1]
 
-            self.net.append(WireLayer(mapping_dim, hidden_features, scale, omega, bias, weight_init, bias_init, dtype=torch.float))
+        self.net.append(WireLayer(encoded_dim, hidden_features, scale_wire, omega, bias, weight_init, bias_init, dtype=torch.float))
 
         # build hidden layers
         for i in range(hidden_layers):
             LOGGER.debug("Adding hidden layer")
             if residual_net:
                 LOGGER.debug("Adding residual layer")
-                self.net.append(WireResidualLayer(hidden_features, hidden_features, scale, omega, bias, weight_init, bias_init))
+                self.net.append(WireResidualLayer(hidden_features, hidden_features, scale_wire, omega, bias, weight_init, bias_init))
             else:
                 LOGGER.debug("Adding normal layer")
-                self.net.append(WireLayer(hidden_features, hidden_features, scale, omega, bias, weight_init, bias_init))
+                self.net.append(WireLayer(hidden_features, hidden_features, scale_wire, omega, bias, weight_init, bias_init))
 
         # Define and initialize the final linear layer
         final_layer = nn.Linear(hidden_features, out_features, bias=final_bias, dtype=torch.cfloat)
@@ -110,6 +113,7 @@ class WireModel(nn.Module):
 
     def forward(self, x):
         LOGGER.debug("FORWARD WireModel")
+        x = self.encoder(x)
         return self.net(x)
 
 
@@ -183,23 +187,25 @@ class WireFinerResidualLayer(nn.Module):
 
 
 class WireFinerModel(nn.Module):
-    def __init__(self, in_features, out_features, mapping_type='gauss', mapping_dim=4, mapping_scale=10, hidden_layers=5,hidden_features=256,
-                 bias=True, final_bias=False, scale=2.0, omega=30.0, omega_f=2.5, hidden_k=10, first_k=10, residual_net=False):
+    def __init__(self, in_features, out_features, hidden_layers=5,hidden_features=256, bias=True, final_bias=False,
+                 scale_wire=2.0, omega=30.0, omega_f=2.5, hidden_k=10, first_k=10, residual_net=False, encoding=None,
+                 **encoder_kwargs):
         super().__init__()
         LOGGER.debug("Initializing WireFinerModel")
 
         self.net = []
-
-        #positional encoding and first layer
-        if mapping_type == 'no':
-            LOGGER.debug("No positional encoding")
-            self.net.append(WireFinerLayer(in_features, hidden_features, scale, omega, omega_f, bias, is_first=True,
-                                           first_k=first_k, hidden_k=hidden_k, dtype=torch.float))
+        # positional encoder
+        if encoding is None:
+            self.encoder = nn.Identity()
+            encoded_dim = in_features
         else:
-            LOGGER.debug("Using positional encoding")
-            self.net.append(GaussianFourierFeatureTransform(type=mapping_type, input_dim=in_features,
-                                                            mapping_dim=mapping_dim, scale=mapping_scale))
-            self.net.append(WireFinerLayer(mapping_dim, hidden_features, scale, omega, omega_f, bias,
+            encoder_cls = ENCODER_REGISTRY[encoding]
+            self.encoder = encoder_cls(**encoder_kwargs)
+            with torch.no_grad():
+                dummy_input = torch.zeros(1, in_features)
+                encoded_dim = self.encoder(dummy_input).shape[-1]
+
+        self.net.append(WireFinerLayer(encoded_dim, hidden_features, scale_wire, omega, omega_f, bias,
                                            first_k=first_k, hidden_k=hidden_k, dtype=torch.float))
 
 
@@ -208,11 +214,11 @@ class WireFinerModel(nn.Module):
             LOGGER.debug("Adding hidden layer")
             if residual_net:
                 LOGGER.debug("Adding residual layer")
-                self.net.append(WireFinerResidualLayer(hidden_features, hidden_features, scale, omega, omega_f,
+                self.net.append(WireFinerResidualLayer(hidden_features, hidden_features, scale_wire, omega, omega_f,
                                                        bias, first_k=first_k, hidden_k=hidden_k))
             else:
                 LOGGER.debug("Adding normal layer")
-                self.net.append(WireFinerLayer(hidden_features, hidden_features, scale, omega, omega_f, bias,
+                self.net.append(WireFinerLayer(hidden_features, hidden_features, scale_wire, omega, omega_f, bias,
                                                first_k=first_k, hidden_k=hidden_k))
 
         # Define and initialize the final linear layer
@@ -227,4 +233,5 @@ class WireFinerModel(nn.Module):
 
     def forward(self, x):
         LOGGER.debug("FORWARD WireFinerModel")
+        x = self.encoder(x)
         return self.net(x)

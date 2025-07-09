@@ -5,6 +5,7 @@ from helpers import get_logger
 LOGGER = get_logger(name = "PositionalEncodings", log_file="worldclim-dataset.log")
 
 
+
 ########################################################################################################################
 ### GAUSSIAN FOURIER POSITIONAL ENCODING
 #######################################################################################################################
@@ -53,35 +54,36 @@ class GaussianFourierFeatureTransform(nn.Module):
 #######################################################################################################################
 
 class SphericalFourierFeatureTransform(nn.Module):
-    def __init__(self,  omegas: list[float], scale: list[int] ):
+    def __init__(self,  r_min:float, r_max: float, scale: list[int] ):
         """
         Initialize the spherical positional encoding.
 
         Args:
-            omegas (list[float]): The frequency scaling factors for latitude and longitude.
+            r_min (float): The minimum radius of the spherical positional encoding.
+            r_max (float): The maximum radius of the spherical positional encoding.
             scale (list[int]): The number of scales for latitude and longitude.
         """
         super().__init__()
 
-        # coords = [lat, lon]
-        # omegas = [omega_lat, omega_lon]
         # scale = [scale_lat, scale_lon]
 
         # general function for positional encoding is sin(omega_lat^(scale_lat_i/(len(scale_lat)) - 1) * lat)
         LOGGER.debug("Initializing SphericalFourierFeatureTransform")
-        self.omega_lat, self.omega_lon = omegas
+
+        self.r_min = r_min
+        self.r_max = r_max
         self.scale_lat, self.scale_lon = scale
 
-        self.freq_lat = self._compute_freq(self.omega_lat, self.scale_lat)
-        self.freq_lon = self._compute_freq(self.omega_lon, self.scale_lon)
+        # Compute the frequency of the spherical positional encoding as a function of the scale.
+        self.freq_lat = self._compute_freq(self.scale_lat)
+        self.freq_lon = self._compute_freq(self.scale_lon)
 
 
-    def _compute_freq(self, omega, scale):
+    def _compute_freq(self, scale):
         """
         Compute the frequency of the spherical positional encoding as a function of the scale.
 
         Args:
-            omega (float): The frequency scaling factor.
             scale (int): The number of scales.
 
         Returns:
@@ -91,7 +93,8 @@ class SphericalFourierFeatureTransform(nn.Module):
         if scale == 1:
             return torch.ones(1)
         s = torch.arange(scale)
-        return omega ** (s / (scale - 1))
+        g = self.r_max / self.r_min
+        return self.r_min * g ** (s / (scale - 1))
 
 
     def forward(self, coords):
@@ -150,13 +153,12 @@ class SphericalFourierFeatureTransform(nn.Module):
 ##########################################################################################################################
 
 
-
-
 class Sphere2Vec(nn.Module):
-    def __init__(self, omega: int, scale: int, mode: str):
+    def __init__(self, r_min: float, r_max: float, scale: int, mode: str):
         super().__init__()
 
-        self.omega = omega
+        self.r_min = r_min
+        self.r_max = r_max
         self.scale = scale
         self.mode = mode
 
@@ -168,7 +170,8 @@ class Sphere2Vec(nn.Module):
         Compute the frequency for each scale step (this will return an array of size [scale]).
         """
         s = torch.arange(self.scale)
-        return self.omega ** (s / (self.scale - 1))  # Returns frequencies for each scale step
+        g = self.r_max / self.r_min
+        return self.r_min * g ** (s / (self.scale - 1))  # Returns frequencies for each scale step
 
     def forward(self, coords):
         """
@@ -183,18 +186,17 @@ class Sphere2Vec(nn.Module):
         lon = coords[:, 1] * torch.pi / 180  # Convert longitudes to radians
 
         # Scale frequencies
-        freq = self.freqs.to(coords.device)  # [scale]
+        freq = self.freqs  # [scale]
         lat_scaled = lat.unsqueeze(1) * freq.unsqueeze(0)  # [B, scale]
         lon_scaled = lon.unsqueeze(1) * freq.unsqueeze(0)  # [B, scale]
 
-        # Calculate sin and cos of scaled latitudes and longitudes
-        sin_lat = torch.sin(lat_scaled)  # [B, scale]
-        cos_lat = torch.cos(lat_scaled)  # [B, scale]
-        sin_lon = torch.sin(lon_scaled)  # [B, scale]
-        cos_lon = torch.cos(lon_scaled)  # [B, scale]
-
         if self.mode == "SphereC":
             # SphereC: Encode interaction terms for spherical coordinates
+            sin_lat = torch.sin(lat_scaled)  # [B, scale]
+            cos_lat = torch.cos(lat_scaled)  # [B, scale]
+            cos_lon = torch.cos(lon_scaled)  # [B, scale]
+            sin_lon = torch.sin(lon_scaled)  # [B, scale]
+
             terms = torch.cat([
                 sin_lat,  # [B, scale]
                 cos_lat * cos_lon,  # [B, scale]
@@ -203,22 +205,35 @@ class Sphere2Vec(nn.Module):
 
         elif self.mode == "SphereM":
             # SphereM: Extended interaction terms for spherical coordinates
-            base_cos_lat = torch.cos(lat).unsqueeze(1)  # [B, 1]
-            base_sin_lon = torch.sin(lon).unsqueeze(1)  # [B, 1]
-            base_cos_lon = torch.cos(lon).unsqueeze(1)  # [B, 1]
+            sin_lat = torch.sin(lat_scaled)  # [B, scale]
+            cos_lat = torch.cos(lat_scaled)  # [B, scale]
+            base_cos_lon = torch.cos(lon).unsqueeze(-1)  # [B, 1]
+            base_cos_lat = torch.cos(lat).unsqueeze(-1)  # [B, 1]
+            cos_lon = torch.cos(lon_scaled)  # [B, scale]
+            sin_lon = torch.sin(lon_scaled)  # [B, scale]
+            base_sin_lon = torch.sin(lon).unsqueeze(-1)  # [B, 1]
+
 
             terms = torch.cat([
                 sin_lat,  # [B, scale]
                 cos_lat * base_cos_lon,  # [B, scale]
-                cos_lat * cos_lon,  # [B, scale]
+                base_cos_lat * cos_lon,  # [B, scale]
                 cos_lat * base_sin_lon,  # [B, scale]
-                cos_lat * sin_lon  # [B, scale]
+                base_cos_lat * sin_lon  # [B, scale]
             ], dim=-1)  # [B, 5 * scale]
 
         return terms  # Output shape: [B, output_dim]
 
 
+#########################################################################################################################
+## ENCODER REGISTRY
+########################################################################################################################
 
+ENCODER_REGISTRY = {
+    #"gauss": GaussianFourierFeatureTransform,
+    "sphere2vec": Sphere2Vec,
+    "dfs": SphericalFourierFeatureTransform
+     }
 
 
 

@@ -1,0 +1,30 @@
+Optimizer:
+    name: 'torch.optim.Adam'
+    lr: 1.0e-4
+
+Dataset:
+  data_path: 'data/worldclim2.zarr'
+  points_path: '../coordinates.h5'
+  normalised_stats_path: '../normalized_stats.json'
+  data_key: 'land_coords' # 'ocean_coords'
+  shuffle: True
+
+
+
+Model:
+  MLP_MODEL:
+    name: 'models.implicit_neural_representations.inr_models.mlp_model.MLPModel'
+    in_features: 2
+    out_features: 2
+    hidden_features: 128,
+    hidden_layers: 5
+    bias: True
+    weight_init: 0.1
+    bias_init: None,
+    residual_net: False
+    encoding: None # 'dfs' or 'sphere2vec' or none
+    r_min : 0.001
+    r_max : 1.0
+    scale: [10, 10] # [scale_lat, scale_lon] for dfs,  int for sphere2vec
+    mode: "SphereC" # for basic sphere2vec, "SphereM" for multi-scale sphere2vec
+

@@ -8,6 +8,7 @@ import numpy
 from helpers import get_logger
 from utils.activations import siren_activation
 from utils.Initializers import Initializer
+from utils.positional_encodings import ENCODER_REGISTRY
 
 
 LOGGER = get_logger(name = "SirenModel", log_file="worldclim-dataset.log")
@@ -107,7 +108,9 @@ class SirenResidualLayer(nn.Module):
 
 
 class SirenModel(nn.Module):
-    def __init__(self, in_features=2, out_features=2, hidden_layers=5, hidden_features=128, bias=True, final_bias=False, first_omega_0=30., hidden_omega_0=30., residual_net=False):
+    def __init__(self, in_features=2, out_features=2, hidden_layers=5, hidden_features=128,
+                 bias=True, final_bias=False, first_omega_0=30., hidden_omega_0=30.,
+                 residual_net=False, encoding=None, **encoder_kwargs):
         """
         Initializes a SirenModel with the given parameters.
 
@@ -123,8 +126,20 @@ class SirenModel(nn.Module):
         super().__init__()
         LOGGER.info("SIREN MODEL")
         self.net = []
+
+        # positional encoder
+        if encoding is None:
+            self.encoder = nn.Identity()
+            encoded_dim = in_features
+        else:
+            encoder_cls = ENCODER_REGISTRY[encoding]
+            self.encoder = encoder_cls(**encoder_kwargs)
+            with torch.no_grad():
+                dummy_input = torch.zeros(1, in_features)
+                encoded_dim = self.encoder(dummy_input).shape[-1]
+
         # build the first layer
-        self.net.append(SirenLayer(in_features, hidden_features, bias=bias,is_first=True, omega_0=first_omega_0))
+        self.net.append(SirenLayer(encoded_dim, hidden_features, bias=bias,is_first=True, omega_0=first_omega_0))
 
         # build the hidden layers
         for i in range(hidden_layers):
@@ -156,6 +171,7 @@ class SirenModel(nn.Module):
         """
         LOGGER.info("FORWARDING SIREN MODEL")
         # Forward the input tensor through the network
+        x = self.encoder(x)
         return self.net(x)
 
 
@@ -258,7 +274,7 @@ class FinerResidualLayer(nn.Module):
 
 class FinerModel(nn.Module):
     def __init__(self, in_features=2, out_features=2, bias=True, final_bias=False, hidden_layers=5, hidden_features=128, first_omega_0=30., hidden_omega_0=30.,
-                 first_k=None, hidden_k=None, residual_net=False):
+                 first_k=None, hidden_k=None, residual_net=False, encoding=None, **encoder_kwargs):
         """
         Initializes the FinerModel.
 
@@ -279,7 +295,19 @@ class FinerModel(nn.Module):
         LOGGER.info("INITIALIZING FINER MODEL")
         assert bias, "Bias must be True for FinerModel"
         self.net = []
-        self.net.append(FinerLayer(in_features, hidden_features, bias=bias, is_first=True, omega_0=first_omega_0, first_k=first_k))
+
+        # positional encoder
+        if encoding is None:
+            self.encoder = nn.Identity()
+            encoded_dim = in_features
+        else:
+            encoder_cls = ENCODER_REGISTRY[encoding]
+            self.encoder = encoder_cls(**encoder_kwargs)
+            with torch.no_grad():
+                dummy_input = torch.zeros(1, in_features)
+                encoded_dim = self.encoder(dummy_input).shape[-1]
+
+        self.net.append(FinerLayer(encoded_dim, hidden_features, bias=bias, is_first=True, omega_0=first_omega_0, first_k=first_k))
 
         for i in range(hidden_layers):
             # build the hidden layers
@@ -310,4 +338,5 @@ class FinerModel(nn.Module):
             torch.Tensor: The output tensor.
         """
         LOGGER.debug("FORWARDING FINER MODEL")
+        x = self.encoder(x)
         return self.net(x)

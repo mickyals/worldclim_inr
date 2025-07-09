@@ -8,7 +8,6 @@ Dataset:
   normalised_stats_path: '../normalized_stats.json'
   data_key: 'land_coords' # 'ocean_coords'
   shuffle: True
-  deg2rad: True
 
 
 
@@ -24,6 +23,11 @@ Model:
     first_omega_0: 30.0
     hidden_omega_0: 30.0
     residual_net: False # set true is using siren residual model
+    encoding: None # 'dfs' or 'sphere2vec' or none
+    r_min : 0.001
+    r_max : 1.0
+    scale: [10, 10] # [scale_lat, scale_lon] for dfs,  int for sphere2vec
+    mode: "SphereC" # for basic sphere2vec, "SphereM" for multi-scale sphere2vec
 
   FINER_MODEL:
     name: 'models.implicit_neural_representations.inr_models.siren_model.FinerModel'
@@ -38,3 +42,8 @@ Model:
     first_k: 1.0 # higher bias values give large range of frequencies
     hidden_k: 1.0
     residual_net: False # set true is using finer residual model
+    encoding: None # 'dfs' or 'sphere2vec' or none
+    r_min : 0.001
+    r_max : 1.0
+    scale: [10, 10] # [scale_lat, scale_lon] for dfs,  int for sphere2vec
+    mode: "SphereC" # for basic sphere2vec, "SphereM" for multi-scale sphere2vec

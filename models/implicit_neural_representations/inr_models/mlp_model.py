@@ -6,8 +6,7 @@ import torch
 import torch.nn as nn
 from helpers import get_logger
 from utils.Initializers import Initializer
-from utils.positional_encodings import GaussianFourierFeatureTransform
-
+from utils.positional_encodings import ENCODER_REGISTRY
 
 LOGGER = get_logger(name = "MLPModel", log_file="worldclim-dataset.log")
 
@@ -61,16 +60,26 @@ class MLPResidualLayer(nn.Module):
 
 
 class MLPModel(nn.Module):
-    def __init__(self, in_features, out_features, mapping_type="gauss", mapping_dim=4, mapping_scale=10, hidden_features=128, hidden_layers = 5,  bias=True, weight_init=0.1, bias_init=None, residual_net=False):
+    def __init__(self, in_features, out_features, hidden_features=128,
+                 hidden_layers = 5, bias=True, weight_init=0.1, bias_init=None,
+                 residual_net=False, encoding=None, **encoder_kwargs):
         super().__init__()
         LOGGER.info("Initializing MLP MODEL")
         self.net = []
 
-        # positional encoding
-        self.net.append(GaussianFourierFeatureTransform(type=mapping_type, input_dim=in_features, mapping_dim=mapping_dim, scale=mapping_scale))
+        # positional encoder
+        if encoding is None:
+            self.encoder = nn.Identity()
+            encoded_dim = in_features
+        else:
+            encoder_cls = ENCODER_REGISTRY[encoding]
+            self.encoder = encoder_cls(**encoder_kwargs)
+            with torch.no_grad():
+                dummy_input = torch.zeros(1, in_features)
+                encoded_dim = self.encoder(dummy_input).shape[-1]
 
         # Add the first MLP layer
-        self.net.append(MLPLayer(mapping_dim, hidden_features, bias=bias, weight_init=weight_init, bias_init=bias_init))
+        self.net.append(MLPLayer(encoded_dim, hidden_features, bias=bias, weight_init=weight_init, bias_init=bias_init))
 
         # Add the residual layers
         for i in range(hidden_layers):
@@ -88,4 +97,5 @@ class MLPModel(nn.Module):
 
     def forward(self, x):
         LOGGER.debug("FORWARDING MLP MODEL")
+        x = self.encoder(x)
         return self.net(x)
