@@ -50,6 +50,18 @@ Model:
     scale: [10, 10] # [scale_lat, scale_lon] for dfs,  int for sphere2vec
     mode: "SphereC" # for basic sphere2vec, "SphereM" for multi-scale sphere2vec
 
+  Loss:
+    type: 'torch.nn.MSELoss'
+    params:
+      reduction: 'mean'
+
+
+
+TRAINER:
+
+  epochs: 100
+  batch_size: 256
+
 
 WANDB:
   enabled: True
