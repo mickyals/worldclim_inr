@@ -15,7 +15,7 @@ LOGGER = get_logger(name = "SirenModel", log_file="worldclim-dataset.log")
 
 class SirenLayer(nn.Module):
 
-    def __init__(self, in_features, out_features, bias=True, is_first=False, omega_0=30.):
+    def __init__(self, in_features, out_features, bias=True, is_first=False, omega_0=30., dropout_prc=0.0):
         """
         Initializes the SirenLayer with the given parameters.
 
@@ -33,6 +33,8 @@ class SirenLayer(nn.Module):
         self.in_features = in_features
         self.out_features = out_features
         self.activation = siren_activation(self.omega_0)
+        self.dropout_prc = dropout_prc
+        self.dropout = nn.Dropout(dropout_prc) if dropout_prc > 0.0 else nn.Identity()
 
         self.linear = nn.Linear(in_features, out_features, bias=bias)
         Initializer.siren_init(self.linear, in_features, is_first, omega_0)
@@ -56,11 +58,12 @@ class SirenLayer(nn.Module):
         # Apply the linear layer
         out = self.linear(x)
         # Apply the siren activation function
-        return self.activation(out)
+        out = self.activation(out)
+        return self.dropout(out)
 
 
 class SirenResidualLayer(nn.Module):
-    def __init__(self, in_features, out_features, bias=True, omega_0=30., is_first=False):
+    def __init__(self, in_features, out_features, bias=True, omega_0=30., is_first=False, dropout_prc=0.0):
         """
         Initializes the SirenResidualLayer.
 
@@ -76,6 +79,7 @@ class SirenResidualLayer(nn.Module):
         self.in_features = in_features
         self.out_features = out_features
         self.activation = siren_activation(self.omega_0)
+        self.dropout = nn.Dropout(dropout_prc) if dropout_prc > 0.0 else nn.Identity()
 
         # Define a linear layer
         self.first_linear = nn.Linear(in_features, out_features, bias=bias)
@@ -103,13 +107,13 @@ class SirenResidualLayer(nn.Module):
 
         out = self.last_linear(first_activation)
         out = out + x
-
-        return self.activation(out)
+        out =self.activation(out)
+        return self.dropout(out)
 
 
 class SirenModel(nn.Module):
     def __init__(self, in_features=2, out_features=2, hidden_layers=5, hidden_features=128,
-                 bias=True, final_bias=False, first_omega_0=30., hidden_omega_0=30.,
+                 bias=True, final_bias=False, first_omega_0=30., hidden_omega_0=30., dropout=0.0,
                  residual_net=False, encoding=None, **encoder_kwargs):
         """
         Initializes a SirenModel with the given parameters.
@@ -139,18 +143,18 @@ class SirenModel(nn.Module):
                 encoded_dim = self.encoder(dummy_input).shape[-1]
 
         # build the first layer
-        self.net.append(SirenLayer(encoded_dim, hidden_features, bias=bias,is_first=True, omega_0=first_omega_0))
+        self.net.append(SirenLayer(encoded_dim, hidden_features, bias=bias,is_first=True, omega_0=first_omega_0, dropout_prc=0.0))
 
         # build the hidden layers
         for i in range(hidden_layers):
             if residual_net:
                 # build a residual layer
                 LOGGER.info(f"SIREN RESIDUAL LAYER {i}")
-                self.net.append(SirenResidualLayer(hidden_features, hidden_features, bias=bias, omega_0=hidden_omega_0))
+                self.net.append(SirenResidualLayer(hidden_features, hidden_features, bias=bias, omega_0=hidden_omega_0, dropout_prc=dropout))
             else:
                 # build a normal layer
                 LOGGER.info(f"SIREN LAYER {i}")
-                self.net.append(SirenLayer(hidden_features, hidden_features, bias=bias, is_first=False, omega_0=hidden_omega_0))
+                self.net.append(SirenLayer(hidden_features, hidden_features, bias=bias, is_first=False, omega_0=hidden_omega_0, dropout_prc=dropout))
 
         # build the final layer
         final_layer = nn.Linear(hidden_features, out_features, bias=final_bias)
@@ -179,7 +183,7 @@ class SirenModel(nn.Module):
 
 
 class FinerLayer(nn.Module):
-    def __init__(self, in_features, out_features, bias=True, omega_0=30.0, is_first=False, is_last=False, first_k=10, hidden_k=10):
+    def __init__(self, in_features, out_features, bias=True, omega_0=30.0, is_first=False, is_last=False, first_k=10, hidden_k=10, dropout_prc=0.0):
         """
         Initializes a layer with configurable features and biases.
 
@@ -207,6 +211,7 @@ class FinerLayer(nn.Module):
         self.first_k = first_k
         self.hidden_k = hidden_k
         self.activation = siren_activation(self.omega_0, with_finer=True)
+        self.dropout = nn.Dropout(dropout_prc) if dropout_prc > 0.0 else nn.Identity()
 
         # Define a linear layer
         self.linear = nn.Linear(in_features, out_features, bias=bias)
@@ -227,10 +232,11 @@ class FinerLayer(nn.Module):
         # Apply the linear layer
         out = self.linear(x)
         # Apply the siren activation function
-        return self.activation(out)
+        out =self.activation(out)
+        return self.dropout(out)
 
 class FinerResidualLayer(nn.Module):
-    def __init__(self, in_features, out_features, bias=True, omega_0=30.0, hidden_k=10):
+    def __init__(self, in_features, out_features, bias=True, omega_0=30.0, hidden_k=10, dropout_prc=0.0):
         """
         Initializes a FinerResidualLayer.
 
@@ -239,7 +245,7 @@ class FinerResidualLayer(nn.Module):
             out_features (int): The number of output features.
             bias (bool, optional): Whether to include bias terms in the linear layers. Defaults to True.
             omega_0 (float, optional): The frequency scaling factor. Defaults to 30.0.
-            hidden_bias (float, optional): The bias for the hidden layers. Defaults to None.
+            hidden_k (float, optional): The bias for the hidden layers. Defaults to None.
         """
         super().__init__()
 
@@ -249,6 +255,7 @@ class FinerResidualLayer(nn.Module):
         self.omega_0 = omega_0
         self.hidden_k = hidden_k
         self.activation = siren_activation(self.omega_0, with_finer=True)
+        self.dropout = nn.Dropout(dropout_prc) if dropout_prc > 0.0 else nn.Identity()
 
         self.first_linear = nn.Linear(in_features, out_features, bias=bias)
         self.last_linear = nn.Linear(out_features, out_features, bias=bias)
@@ -270,11 +277,12 @@ class FinerResidualLayer(nn.Module):
         first_activation = self.activation(out)
         out = self.last_linear(first_activation)
         out = out + x
-        return self.activation(out)
+        out = self.activation(out)
+        return self.dropout(out)
 
 class FinerModel(nn.Module):
     def __init__(self, in_features=2, out_features=2, bias=True, final_bias=False, hidden_layers=5, hidden_features=128, first_omega_0=30., hidden_omega_0=30.,
-                 first_k=None, hidden_k=None, residual_net=False, encoding=None, **encoder_kwargs):
+                 first_k=None, hidden_k=None, dropout=0.0, residual_net=False, encoding=None, **encoder_kwargs):
         """
         Initializes the FinerModel.
 
@@ -307,17 +315,17 @@ class FinerModel(nn.Module):
                 dummy_input = torch.zeros(1, in_features)
                 encoded_dim = self.encoder(dummy_input).shape[-1]
 
-        self.net.append(FinerLayer(encoded_dim, hidden_features, bias=bias, is_first=True, omega_0=first_omega_0, first_k=first_k))
+        self.net.append(FinerLayer(encoded_dim, hidden_features, bias=bias, is_first=True, omega_0=first_omega_0, first_k=first_k, dropout_prc=0.0))
 
         for i in range(hidden_layers):
             # build the hidden layers
             LOGGER.info("BUILDING FINER MODEL")
             if residual_net:
                 LOGGER.info(f"RESIDUAL LAYER {i}")
-                self.net.append(FinerResidualLayer(hidden_features, hidden_features, bias=True, omega_0=hidden_omega_0, hidden_k=hidden_k))
+                self.net.append(FinerResidualLayer(hidden_features, hidden_features, bias=True, omega_0=hidden_omega_0, hidden_k=hidden_k, dropout_prc=dropout))
             else:
                 LOGGER.info(f"NORMAL LAYER {i}")
-                self.net.append(FinerLayer(hidden_features, hidden_features, bias=True, is_first=False, omega_0=hidden_omega_0, hidden_k=hidden_k))
+                self.net.append(FinerLayer(hidden_features, hidden_features, bias=True, is_first=False, omega_0=hidden_omega_0, hidden_k=hidden_k, dropout_prc=dropout))
 
         # build the final layer
         final_layer = nn.Linear(hidden_features, out_features, bias=final_bias)

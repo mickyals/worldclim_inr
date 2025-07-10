@@ -21,6 +21,7 @@ Model:
     bias: True
     weight_init: 0.1
     bias_init: None,
+    dropout: 0.1
     residual_net: False
     encoding: None # 'dfs' or 'sphere2vec' or none
     r_min : 0.001

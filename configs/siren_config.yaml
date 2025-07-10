@@ -23,6 +23,7 @@ Model:
     first_omega_0: 30.0
     hidden_omega_0: 30.0
     residual_net: False # set true is using siren residual model
+    dropout: 0.0
     encoding: None # 'dfs' or 'sphere2vec' or none
     r_min : 0.001
     r_max : 1.0
@@ -41,9 +42,22 @@ Model:
     hidden_omega_0: 30.0  # scaling factor
     first_k: 1.0 # higher bias values give large range of frequencies
     hidden_k: 1.0
+    dropout: 0.0
     residual_net: False # set true is using finer residual model
     encoding: None # 'dfs' or 'sphere2vec' or none
     r_min : 0.001
     r_max : 1.0
     scale: [10, 10] # [scale_lat, scale_lon] for dfs,  int for sphere2vec
     mode: "SphereC" # for basic sphere2vec, "SphereM" for multi-scale sphere2vec
+
+
+WANDB:
+  enabled: True
+  project: "inr_project"
+  entity: "your_username_or_team"
+  name: "sphere2vec_experiment"
+  dir: "../results"
+  resume: False
+  id: null
+  save_code: True
+  job_type: "train"

@@ -11,7 +11,7 @@ from utils.positional_encodings import ENCODER_REGISTRY
 LOGGER = get_logger(name = "MLPModel", log_file="worldclim-dataset.log")
 
 class MLPLayer(nn.Module):
-    def __init__(self, in_features, out_features, bias=True, weight_init=0.1, bias_init=None):
+    def __init__(self, in_features, out_features, bias=True, weight_init=0.1, bias_init=None, dropout_prc=0.0):
         super().__init__()
 
         LOGGER.info("MLP LAYER")
@@ -20,6 +20,7 @@ class MLPLayer(nn.Module):
         self.weight_init = weight_init
         self.bias_init = bias_init
         self.activation = nn.ReLU()
+        self.dropout = nn.Dropout(dropout_prc) if dropout_prc > 0.0 else nn.Identity()
 
         # Define the linear layer using nn.Linear
         self.linear = nn.Linear(in_features, out_features, bias=bias)
@@ -30,10 +31,11 @@ class MLPLayer(nn.Module):
     def forward(self, x):
         LOGGER.debug("FORWARD PASS")
         out = self.linear(x)
+        out = self.dropout(out)
         return self.activation(out)
 
 class MLPResidualLayer(nn.Module):
-    def __init__(self, in_features, out_features, bias=True, weight_init=0.1, bias_init=None):
+    def __init__(self, in_features, out_features, bias=True, weight_init=0.1, bias_init=None, dropout_prc=0.0):
         super().__init__()
         LOGGER.info("MLP RESIDUAL LAYER")
         self.in_features = in_features
@@ -41,6 +43,7 @@ class MLPResidualLayer(nn.Module):
         self.weight_init = weight_init
         self.bias_init = bias_init
         self.activation = nn.ReLU()
+        self.dropout = nn.Dropout(dropout_prc) if dropout_prc > 0.0 else nn.Identity()
 
         # Define the linear layer using nn.Linear
         self.first_linear = nn.Linear(in_features, out_features, bias=bias)
@@ -56,13 +59,14 @@ class MLPResidualLayer(nn.Module):
         first_activation = self.activation(out)
         out = self.last_linear(first_activation)
         out = out + x
+        out = self.dropout(out)
         return self.activation(out)
 
 
 class MLPModel(nn.Module):
     def __init__(self, in_features, out_features, hidden_features=128,
                  hidden_layers = 5, bias=True, weight_init=0.1, bias_init=None,
-                 residual_net=False, encoding=None, **encoder_kwargs):
+                 residual_net=False, dropout = 0.0, encoding=None, **encoder_kwargs):
         super().__init__()
         LOGGER.info("Initializing MLP MODEL")
         self.net = []
@@ -79,14 +83,14 @@ class MLPModel(nn.Module):
                 encoded_dim = self.encoder(dummy_input).shape[-1]
 
         # Add the first MLP layer
-        self.net.append(MLPLayer(encoded_dim, hidden_features, bias=bias, weight_init=weight_init, bias_init=bias_init))
+        self.net.append(MLPLayer(encoded_dim, hidden_features, bias=bias, weight_init=weight_init, bias_init=bias_init, dropout_prc=0.0))
 
         # Add the residual layers
         for i in range(hidden_layers):
             if residual_net:
-                self.net.append(MLPResidualLayer(hidden_features, hidden_features, bias=bias, weight_init=weight_init, bias_init=bias_init))
+                self.net.append(MLPResidualLayer(hidden_features, hidden_features, bias=bias, weight_init=weight_init, bias_init=bias_init, dropout_prc=dropout))
             else:
-                self.net.append(MLPLayer(hidden_features, hidden_features, bias=bias, weight_init=weight_init, bias_init=bias_init))
+                self.net.append(MLPLayer(hidden_features, hidden_features, bias=bias, weight_init=weight_init, bias_init=bias_init, dropout_prc=dropout))
         # Define and initialize the final linear layer
         final_layer = nn.Linear(hidden_features, out_features, bias=bias)
         with torch.no_grad():

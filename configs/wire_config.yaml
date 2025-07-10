@@ -24,6 +24,7 @@ Model:
     omega: 30.0
     weight_init: 1.0  # distribution for weight initialization
     bias_init: 0.1
+    dropout: 0.0 # if this is here as 0.0, I have yet to implement a complex dropout
     residual_net: False # set true is using wire residual model
     encoding: None # 'dfs' or 'sphere2vec' or none
     r_min : 0.001
@@ -44,6 +45,7 @@ Model:
     first_k: 10
     hidden_k: 10
     omega_f: 2.5
+    dropout: 0.0 # if this is here as 0.0, I have yet to implement a complex dropout
     residual_net: False
     encoding: None # 'dfs' or 'sphere2vec' or none
     r_min : 0.001

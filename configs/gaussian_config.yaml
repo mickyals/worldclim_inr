@@ -28,6 +28,7 @@ Model:
     scale_gaussian: 30.0
     weight_init: 0.1
     bias_init: 1.0
+    dropout: 0.1
     residual_net: False
     encoding: None # 'sphere2vec' or 'dfs'
     r_min : 0.001
@@ -46,6 +47,7 @@ Model:
     first_k: 10 # set based on FINER++ Paper
     hidden_k: 10 # set based on FINER++ Paper
     omega_f: 2.5 # set based on FINER++ Paper
+    dropout: 0.1
     residual_net: False # True is using residual connections
     encoding: None # 'sphere2vec' or 'dfs'
     r_min : 0.001
