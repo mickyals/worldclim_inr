@@ -81,3 +81,14 @@ def instantiate_from_config(config_dict):
 # ==============================================================#
 def model_summary(model, input_size, verbose=1):
     summary(model.to('cpu'), input_size=input_size, device='cpu', verbose=verbose)
+
+
+# ==============================================================#
+###                      WANDB LOGGER                         ###
+# ==============================================================#
+
+def wandb_logger():
+    pass
+
+def wandb_init():
+    pass
