@@ -223,7 +223,7 @@ class wire_activation(nn.Module):
         LOGGER.debug("Applying standard wire activation function")
         # Apply the exponential function to the modulated output
         return torch.exp((1j * self.omega_w * modulated_x) -
-                         torch.abs(self.scale * modulated_x)**2)
+                         (self.scale * modulated_x)**2)
 
 
 
