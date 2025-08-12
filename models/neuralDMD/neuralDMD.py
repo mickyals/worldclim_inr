@@ -51,6 +51,7 @@ class NeuralDMD(L.LightningModule):
         # (B, n) -> (B, R)
         dynamics = spatial_modes * torch.exp(spectral_modes * time_coords)  * initial_conditions
 
+
         return dynamics
 
     def forward(self, spatial_coords, past_time_coords, time_coords, initial_conditions):
@@ -63,4 +64,13 @@ class NeuralDMD(L.LightningModule):
 
 
     def training_step(self, batch, batch_idx):
+
+        (spatial_coords, past_time_coords, time_coords), target = batch
+
+        preds = self(spatial_coords, past_time_coords, time_coords, target)
+        loss = self.loss(preds, target)
+        self.log('train_loss', loss, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        return loss
+
+    def configure_optimizers(self):
         pass
